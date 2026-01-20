@@ -1,5 +1,35 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Environment Setup
+
+Create a `.env` file in the project root with the following variables:
+
+```bash
+# Database Configuration
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=your_secure_password_here
+POSTGRES_DB=ccplate
+
+# Prisma Database URL (update password to match POSTGRES_PASSWORD)
+DATABASE_URL=postgresql://postgres:your_secure_password_here@localhost:5433/ccplate
+```
+
+**Important:** Never commit `.env` to version control. The file is already in `.gitignore`.
+
+## Database Setup
+
+Start the PostgreSQL database using Docker:
+
+```bash
+docker compose up -d
+```
+
+Then run Prisma migrations:
+
+```bash
+npm run db:migrate
+```
+
 ## Getting Started
 
 First, run the development server:
