@@ -20,6 +20,14 @@ This is a bootstrapped Claude Code project. On first run:
 - **Dev:** `npm run dev`
 - **Deploy:** `vercel` (or platform of choice)
 
+### Database Commands
+
+- **Generate client:** `npm run db:generate`
+- **Run migrations:** `npm run db:migrate`
+- **Push schema:** `npm run db:push`
+- **Open studio:** `npm run db:studio`
+- **Seed database:** `npm run db:seed`
+
 ## Tech Stack
 
 - **Language:** TypeScript
@@ -95,7 +103,9 @@ CCPLATE/
 │   ├── components/       # React components
 │   │   ├── ui/           # Reusable UI components
 │   │   └── features/     # Feature-specific components
+│   ├── generated/        # Auto-generated (Prisma client)
 │   ├── lib/              # Utility functions and configs
+│   │   └── db.ts         # Prisma client singleton
 │   └── types/            # TypeScript type definitions
 ├── prisma/
 │   └── schema.prisma     # Database schema
