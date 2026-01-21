@@ -98,10 +98,16 @@ function matchesPattern(filePath: string, pattern: string): boolean {
   
   // Handle glob patterns
   if (normalizedPattern.includes("*")) {
-    const regexPattern = normalizedPattern
-      .replace(/\./g, "\\.")
-      .replace(/\*/g, ".*");
-    return new RegExp(regexPattern).test(normalizedPath);
+    // Convert glob pattern to anchored regex
+    let regexStr = normalizedPattern
+      .replace(/\./g, "\\.")              // Escape dots
+      .replace(/\*\*/g, "{{GLOBSTAR}}")   // Temp placeholder for **
+      .replace(/\*/g, "[^/]*")            // * matches anything except /
+      .replace(/{{GLOBSTAR}}/g, ".*");    // ** matches anything including /
+    
+    regexStr = "^" + regexStr + "$";      // Anchor the pattern
+    
+    return new RegExp(regexStr).test(normalizedPath);
   }
   
   // Handle directory patterns (ending with /)

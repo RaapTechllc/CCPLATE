@@ -4,6 +4,9 @@ import { runAgent } from "@/lib/agent-builder/runtime";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { z } from "zod";
+import { rateLimit } from "@/lib/rate-limit";
+
+const aiRateLimit = { interval: 60000, maxRequests: 10 };
 
 const RunAgentSchema = z.object({
   input: z.string().min(1, "Input is required"),
@@ -18,6 +21,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const rateLimitResult = rateLimit(`agent-run:${session.user?.id ?? "anonymous"}`, aiRateLimit);
+  if (!rateLimitResult.success) {
+    return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
   }
 
   const { id } = await params;

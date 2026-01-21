@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPrompt, testPrompt } from "@/lib/prompt-builder";
+import { rateLimit } from "@/lib/rate-limit";
+
+const aiRateLimit = { interval: 60000, maxRequests: 10 };
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
+  const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "anonymous";
+  const rateLimitResult = rateLimit(`prompt-test:${ip}`, aiRateLimit);
+  if (!rateLimitResult.success) {
+    return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
+  }
+
   try {
     const { id } = await context.params;
     const body = (await request.json()) as {

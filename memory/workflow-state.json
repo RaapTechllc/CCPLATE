@@ -1,13 +1,14 @@
 {
-  "session_id": null,
+  "session_id": "test-1769033091461",
   "current_prp_step": 0,
   "total_prp_steps": 0,
-  "files_changed": 0,
-  "last_commit_time": null,
+  "files_changed": 8,
+  "last_commit_time": "2026-01-21T21:44:51.461Z",
   "last_test_time": null,
-  "context_pressure": 0.0,
+  "context_pressure": 0,
   "active_worktrees": [],
   "pending_nudges": [],
   "errors_detected": [],
-  "lsp_diagnostics_count": 0
+  "lsp_diagnostics_count": 0,
+  "untested_additions": []
 }

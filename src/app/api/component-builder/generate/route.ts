@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -7,6 +7,9 @@ import {
   generateComponentFromSpec,
   ComponentSpecSchema,
 } from "@/lib/component-builder";
+import { rateLimit } from "@/lib/rate-limit";
+
+const aiRateLimit = { interval: 60000, maxRequests: 10 };
 
 const GenerateRequestSchema = z.object({
   description: z.string().min(1).optional(),
@@ -18,11 +21,16 @@ const GenerateRequestSchema = z.object({
   }).optional(),
 });
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const rateLimitResult = rateLimit(`component-builder:${session.user?.id ?? "anonymous"}`, aiRateLimit);
+    if (!rateLimitResult.success) {
+      return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
     }
 
     const body = await request.json();

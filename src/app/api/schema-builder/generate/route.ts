@@ -11,6 +11,9 @@ import {
   getExistingModelNames,
   previewSchemaChange,
 } from "@/lib/schema-builder/manager";
+import { rateLimit } from "@/lib/rate-limit";
+
+const aiRateLimit = { interval: 60000, maxRequests: 10 };
 
 const GenerateRequestSchema = z.object({
   description: z.string().min(10, "Description must be at least 10 characters"),
@@ -21,6 +24,11 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const rateLimitResult = rateLimit(`schema-builder:${session.user.id ?? "anonymous"}`, aiRateLimit);
+    if (!rateLimitResult.success) {
+      return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
     }
 
     const body = await request.json();

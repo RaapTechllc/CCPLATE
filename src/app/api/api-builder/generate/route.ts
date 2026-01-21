@@ -8,6 +8,9 @@ import {
   checkFilesExist,
   type APISpec,
 } from "@/lib/api-builder";
+import { rateLimit } from "@/lib/rate-limit";
+
+const aiRateLimit = { interval: 60000, maxRequests: 10 };
 
 const generateRequestSchema = z.object({
   mode: z.enum(["description", "model"]),
@@ -24,6 +27,11 @@ export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const rateLimitResult = rateLimit(`api-builder:${session.user.id}`, aiRateLimit);
+  if (!rateLimitResult.success) {
+    return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
   }
 
   try {
