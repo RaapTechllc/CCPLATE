@@ -78,11 +78,16 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Write|Edit",
+        "matcher": ".*",
         "hooks": [
           {
             "type": "command",
             "command": "echo \"$(date -Iseconds) | $TOOL_NAME | $TOOL_INPUT\" >> \"$CLAUDE_PROJECT_DIR/memory/tool-log.txt\""
+          },
+          {
+            "type": "command",
+            "command": "bun run \"$CLAUDE_PROJECT_DIR/.claude/hooks/guardian-tick.ts\"",
+            "timeout": 5
           }
         ]
       }

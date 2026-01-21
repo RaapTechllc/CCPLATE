@@ -1,13 +1,17 @@
-import { Metadata } from "next"
-import { requireAuth } from "@/lib/auth-utils"
+import { Metadata } from "next";
+import { requireAuth } from "@/lib/auth-utils";
+import { ProfileNameForm } from "@/components/features/profile/profile-name-form";
+import { ProfilePasswordForm } from "@/components/features/profile/profile-password-form";
+import { ProfileAvatarForm } from "@/components/features/profile/profile-avatar-form";
+import { EmailVerificationBanner } from "@/components/features/profile/email-verification-banner";
 
 export const metadata: Metadata = {
   title: "Profile | CCPLATE",
   description: "Manage your profile settings and account information",
-}
+};
 
 export default async function ProfilePage() {
-  const user = await requireAuth()
+  const user = await requireAuth();
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -18,136 +22,28 @@ export default async function ProfilePage() {
         </p>
       </div>
 
+      {!user.emailVerified && <EmailVerificationBanner />}
+
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <div className="rounded-lg border bg-white p-6 shadow-sm">
             <h2 className="mb-6 text-xl font-semibold text-gray-900">
               Personal Information
             </h2>
-            <form className="space-y-6">
-              <div className="grid gap-6 sm:grid-cols-2">
-                <div>
-                  <label
-                    htmlFor="name"
-                    className="mb-2 block text-sm font-medium text-gray-700"
-                  >
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    id="name"
-                    name="name"
-                    defaultValue={user.name || ""}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                    placeholder="Enter your name"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="email"
-                    className="mb-2 block text-sm font-medium text-gray-700"
-                  >
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    id="email"
-                    name="email"
-                    defaultValue={user.email}
-                    disabled
-                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-gray-500"
-                  />
-                  <p className="mt-1 text-xs text-gray-500">
-                    Email cannot be changed
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="bio"
-                  className="mb-2 block text-sm font-medium text-gray-700"
-                >
-                  Bio
-                </label>
-                <textarea
-                  id="bio"
-                  name="bio"
-                  rows={4}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  placeholder="Tell us about yourself..."
-                />
-              </div>
-
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  className="rounded-lg bg-blue-600 px-6 py-2 font-medium text-white transition-colors hover:bg-blue-700"
-                >
-                  Save Changes
-                </button>
-              </div>
-            </form>
+            <ProfileNameForm defaultName={user.name || ""} email={user.email} />
           </div>
 
           <div className="mt-6 rounded-lg border bg-white p-6 shadow-sm">
             <h2 className="mb-6 text-xl font-semibold text-gray-900">
               Change Password
             </h2>
-            <form className="space-y-6">
-              <div>
-                <label
-                  htmlFor="current-password"
-                  className="mb-2 block text-sm font-medium text-gray-700"
-                >
-                  Current Password
-                </label>
-                <input
-                  type="password"
-                  id="current-password"
-                  name="currentPassword"
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                />
-              </div>
-              <div className="grid gap-6 sm:grid-cols-2">
-                <div>
-                  <label
-                    htmlFor="new-password"
-                    className="mb-2 block text-sm font-medium text-gray-700"
-                  >
-                    New Password
-                  </label>
-                  <input
-                    type="password"
-                    id="new-password"
-                    name="newPassword"
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="confirm-password"
-                    className="mb-2 block text-sm font-medium text-gray-700"
-                  >
-                    Confirm New Password
-                  </label>
-                  <input
-                    type="password"
-                    id="confirm-password"
-                    name="confirmPassword"
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  className="rounded-lg bg-blue-600 px-6 py-2 font-medium text-white transition-colors hover:bg-blue-700"
-                >
-                  Update Password
-                </button>
-              </div>
-            </form>
+            {user.passwordHash ? (
+              <ProfilePasswordForm />
+            ) : (
+              <p className="text-sm text-gray-500">
+                Password change is not available for accounts using social login (Google, GitHub).
+              </p>
+            )}
           </div>
         </div>
 
@@ -156,17 +52,10 @@ export default async function ProfilePage() {
             <h2 className="mb-4 text-xl font-semibold text-gray-900">
               Profile Picture
             </h2>
-            <div className="flex flex-col items-center">
-              <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-blue-100 text-3xl font-bold text-blue-600">
-                {(user.name || user.email).charAt(0).toUpperCase()}
-              </div>
-              <button
-                type="button"
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-              >
-                Change Picture
-              </button>
-            </div>
+            <ProfileAvatarForm
+              currentImage={user.image}
+              userName={user.name || user.email}
+            />
           </div>
 
           <div className="mt-6 rounded-lg border bg-white p-6 shadow-sm">
@@ -191,9 +80,17 @@ export default async function ProfilePage() {
                 </dd>
               </div>
               <div>
-                <dt className="text-sm text-gray-500">Account Status</dt>
-                <dd className="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700">
-                  Active
+                <dt className="text-sm text-gray-500">Email Status</dt>
+                <dd>
+                  {user.emailVerified ? (
+                    <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700">
+                      Verified
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full bg-yellow-100 px-2 py-1 text-xs font-medium text-yellow-700">
+                      Not Verified
+                    </span>
+                  )}
                 </dd>
               </div>
             </dl>
@@ -216,5 +113,5 @@ export default async function ProfilePage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -3,7 +3,8 @@
 import { useState } from "react"
 import { z } from "zod"
 import { showToast } from "@/lib/toast"
-import { forgotPasswordSchema, type ForgotPasswordInput } from "@/types/auth"
+import { forgotPasswordSchema } from "@/types/auth"
+import { forgotPasswordAction } from "@/lib/actions/auth.actions"
 
 export function ForgotPasswordForm() {
   const [email, setEmail] = useState("")
@@ -17,30 +18,20 @@ export function ForgotPasswordForm() {
     setIsLoading(true)
 
     try {
-      // Validate email
       const validatedData = forgotPasswordSchema.parse({ email })
 
-      // Submit to password reset API
-      const response = await fetch("/api/auth/forgot-password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email: validatedData.email }),
-      })
+      const result = await forgotPasswordAction(validatedData.email)
 
-      // Always show success message for security reasons
-      // (don't reveal whether email exists in system)
       setIsSubmitted(true)
-      showToast.success("If an account exists, you will receive a reset link")
+      showToast.success(result.message)
     } catch (err) {
       if (err instanceof z.ZodError) {
         setError(err.errors[0]?.message || "Invalid email address")
       } else {
-        // Still show success for security - don't reveal server errors
         setIsSubmitted(true)
         showToast.success("If an account exists, you will receive a reset link")
       }
+    } finally {
       setIsLoading(false)
     }
   }

@@ -9,6 +9,8 @@
  * - 2: Block the operation (with reason)
  */
 
+import * as path from "path";
+
 interface HookInput {
   tool_name: string;
   tool_input: Record<string, unknown>;
@@ -24,6 +26,19 @@ interface BlockResponse {
 interface AllowResponse {
   decision: "approve";
 }
+
+// Paths that are always allowed (worktrees, memory)
+const ALWAYS_ALLOW: string[] = [
+  ".worktrees/",
+  "memory/",
+  ".claude/agents/",
+];
+
+// Worktree isolation paths (used when CCPLATE_WORKTREE is set)
+const WORKTREE_SHARED_PATHS: string[] = [
+  "memory/",
+  ".claude/agents/",
+];
 
 // Files that should NEVER be written to
 const NEVER_WRITE: string[] = [
@@ -101,7 +116,69 @@ function matchesPattern(filePath: string, pattern: string): boolean {
          normalizedPath.endsWith(normalizedPattern);
 }
 
-function checkNeverWrite(filePath: string): string | null {
+function isWithinDir(targetAbs: string, dirAbs: string): boolean {
+  const t = targetAbs.replace(/\\/g, "/");
+  const d = dirAbs.replace(/\\/g, "/").replace(/\/$/, "");
+  // Exact match OR target starts with dir + "/" (prevents prefix escape)
+  return t === d || t.startsWith(d + "/");
+}
+
+function isAlwaysAllowed(filePath: string, cwd: string): boolean {
+  const projectDir = process.env.CLAUDE_PROJECT_DIR || cwd || ".";
+  
+  // Resolve to absolute path to prevent traversal attacks
+  const absPath = path.resolve(projectDir, filePath);
+  
+  for (const allowedPath of ALWAYS_ALLOW) {
+    const allowedAbs = path.resolve(projectDir, allowedPath);
+    if (isWithinDir(absPath, allowedAbs)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Validates worktree access when CCPLATE_WORKTREE env var is set.
+ * Restricts writes to the assigned worktree directory and shared paths.
+ */
+function validateWorktreeAccess(filePath: string, assignedWorktree: string, cwd: string): boolean {
+  const projectDir = process.env.CLAUDE_PROJECT_DIR || cwd || ".";
+  
+  // Resolve to absolute path to prevent traversal attacks
+  const absPath = path.resolve(projectDir, filePath);
+  
+  // Check if path is within the assigned worktree
+  const worktreeAbs = path.resolve(projectDir, `.worktrees/${assignedWorktree}`);
+  if (isWithinDir(absPath, worktreeAbs)) {
+    return true;
+  }
+  
+  // Check shared paths (memory/, .claude/agents/)
+  for (const sharedPath of WORKTREE_SHARED_PATHS) {
+    const sharedAbs = path.resolve(projectDir, sharedPath);
+    if (isWithinDir(absPath, sharedAbs)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Gets the assigned worktree from environment variable.
+ * Returns null if no worktree isolation is active.
+ */
+function getAssignedWorktree(): string | null {
+  return process.env.CCPLATE_WORKTREE || null;
+}
+
+function checkNeverWrite(filePath: string, cwd: string): string | null {
+  // Skip check if path is always allowed (with traversal protection)
+  if (isAlwaysAllowed(filePath, cwd)) {
+    return null;
+  }
+  
   for (const pattern of NEVER_WRITE) {
     if (matchesPattern(filePath, pattern)) {
       return `Protected file: ${pattern} cannot be modified`;
@@ -160,7 +237,7 @@ async function main(): Promise<void> {
   try {
     const text = await Bun.stdin.text();
     input = JSON.parse(text) as HookInput;
-  } catch (error) {
+  } catch {
     const response: BlockResponse = {
       decision: "block",
       reason: "Failed to parse hook input",
@@ -189,7 +266,7 @@ async function main(): Promise<void> {
   }
   
   // Check against never-write list
-  const neverWriteReason = checkNeverWrite(filePath);
+  const neverWriteReason = checkNeverWrite(filePath, input.cwd);
   if (neverWriteReason) {
     const response: BlockResponse = {
       decision: "block",
@@ -213,6 +290,19 @@ async function main(): Promise<void> {
   // Log sensitive file modifications (but allow)
   if (isSensitiveFile(filePath)) {
     await logSensitiveModification(filePath, input.tool_name);
+  }
+  
+  // Check worktree isolation (opt-in via CCPLATE_WORKTREE env var)
+  const assignedWorktree = getAssignedWorktree();
+  if (assignedWorktree) {
+    if (!validateWorktreeAccess(filePath, assignedWorktree, input.cwd)) {
+      const response: BlockResponse = {
+        decision: "block",
+        reason: `BLOCKED: Worktree isolation - agent assigned to "${assignedWorktree}" cannot write to ${filePath}. Allowed: .worktrees/${assignedWorktree}/**, memory/**, .claude/agents/**`,
+      };
+      console.log(JSON.stringify(response));
+      process.exit(2);
+    }
   }
   
   // Allow the operation

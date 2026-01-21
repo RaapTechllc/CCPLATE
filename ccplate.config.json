@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "guardian": {
+    "enabled": true,
+    "nudges": {
+      "commit": {
+        "enabled": true,
+        "filesThreshold": 5,
+        "minutesThreshold": 15
+      },
+      "test": {
+        "enabled": true
+      },
+      "progress": {
+        "enabled": true
+      },
+      "context": {
+        "enabled": true,
+        "threshold": 0.8
+      },
+      "error": {
+        "enabled": true
+      }
+    },
+    "cooldown": {
+      "minutes": 10,
+      "toolUses": 5
+    }
+  },
+  "worktrees": {
+    "baseDir": ".worktrees",
+    "branchPrefix": "ccplate/"
+  },
+  "lsp": {
+    "enabled": false,
+    "languages": ["typescript"]
+  },
+  "rlm": {
+    "enabled": true,
+    "maxExcerptLines": 50,
+    "recursionThreshold": 10,
+    "maxRecursionDepth": 3
+  }
+}

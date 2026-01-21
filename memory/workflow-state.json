@@ -1,0 +1,13 @@
+{
+  "session_id": null,
+  "current_prp_step": 0,
+  "total_prp_steps": 0,
+  "files_changed": 0,
+  "last_commit_time": null,
+  "last_test_time": null,
+  "context_pressure": 0.0,
+  "active_worktrees": [],
+  "pending_nudges": [],
+  "errors_detected": [],
+  "lsp_diagnostics_count": 0
+}

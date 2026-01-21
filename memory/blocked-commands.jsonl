@@ -1,1 +1,1 @@
-{"timestamp":"2026-01-20T06:42:11.389Z","command":"cd \"/Users/timraap/cursor projects/CCPLATE\" && ls -la | grep -E \"^-.*\\.env\"","reason":"Protected path access: .env","blocked":true}
+{"timestamp":"2026-01-20T18:06:27.697Z","command":"cd \"/Users/timraap/cursor projects/CCPLATE\" && ls -la .env 2>&1 || echo \"File does not exist\"","reason":"Protected path access: .env","blocked":true}

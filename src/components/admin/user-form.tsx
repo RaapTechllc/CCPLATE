@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,19 +14,17 @@ interface UserFormProps {
 
 type Role = "USER" | "ADMIN";
 
-export function UserForm({ user, onSubmit, loading }: UserFormProps) {
-  const [name, setName] = useState(user.name || "");
-  const [email, setEmail] = useState(user.email);
-  const [role, setRole] = useState<Role>(user.role);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+interface UserFormInternalProps extends UserFormProps {
+  initialName: string;
+  initialEmail: string;
+  initialRole: Role;
+}
 
-  // Reset form when user changes
-  useEffect(() => {
-    setName(user.name || "");
-    setEmail(user.email);
-    setRole(user.role);
-    setErrors({});
-  }, [user]);
+function UserFormInternal({ user, onSubmit, loading, initialName, initialEmail, initialRole }: UserFormInternalProps) {
+  const [name, setName] = useState(initialName);
+  const [email, setEmail] = useState(initialEmail);
+  const [role, setRole] = useState<Role>(initialRole);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -131,5 +129,19 @@ export function UserForm({ user, onSubmit, loading }: UserFormProps) {
         </Button>
       </div>
     </form>
+  );
+}
+
+export function UserForm({ user, onSubmit, loading }: UserFormProps) {
+  return (
+    <UserFormInternal
+      key={user.id}
+      user={user}
+      onSubmit={onSubmit}
+      loading={loading}
+      initialName={user.name || ""}
+      initialEmail={user.email}
+      initialRole={user.role}
+    />
   );
 }
