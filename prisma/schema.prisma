@@ -24,14 +24,17 @@ model User {
   role          Role      @default(USER)
 
   // Timestamps
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime? // Soft delete
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime? // Soft delete
+  lastLoginAt DateTime?
 
   // Relations
   accounts Account[]
   sessions Session[]
+  files    File[]
 
+  @@index([deletedAt])
   @@map("users")
 }
 
@@ -76,10 +79,66 @@ model VerificationToken {
 }
 
 // ============================================
+// File Storage
+// ============================================
+
+model File {
+  id           String      @id @default(cuid())
+  filename     String      // stored filename (UUID-based)
+  originalName String      // original filename from upload
+  mimeType     String
+  size         Int         // bytes
+  url          String      // public URL or path
+  storageType  StorageType @default(LOCAL)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // soft delete
+
+  @@index([userId])
+  @@index([mimeType])
+  @@map("files")
+}
+
+// ============================================
+// System Settings
+// ============================================
+
+model SystemSetting {
+  id       String      @id @default(cuid())
+  key      String      @unique
+  value    String      @db.Text
+  type     SettingType @default(STRING)
+  category String      @default("general")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+  @@map("system_settings")
+}
+
+// ============================================
 // Enums
 // ============================================
 
 enum Role {
   USER
   ADMIN
+}
+
+enum StorageType {
+  LOCAL
+  S3
+  R2
+}
+
+enum SettingType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
 }
