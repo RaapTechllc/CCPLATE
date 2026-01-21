@@ -75,7 +75,13 @@ export async function middleware(request: NextRequest) {
       // For API routes, return 403 Forbidden
       if (pathname.startsWith("/api/")) {
         return NextResponse.json(
-          { error: "Forbidden: Admin access required" },
+          {
+            success: false,
+            error: {
+              code: "FORBIDDEN",
+              message: "Forbidden: Admin access required",
+            },
+          },
           { status: 403 }
         )
       }
@@ -94,7 +100,13 @@ export async function middleware(request: NextRequest) {
       // For API routes, return 401 Unauthorized
       if (pathname.startsWith("/api/")) {
         return NextResponse.json(
-          { error: "Unauthorized: Authentication required" },
+          {
+            success: false,
+            error: {
+              code: "UNAUTHORIZED",
+              message: "Unauthorized: Authentication required",
+            },
+          },
           { status: 401 }
         )
       }

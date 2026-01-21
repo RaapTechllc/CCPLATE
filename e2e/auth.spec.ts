@@ -11,14 +11,15 @@ test.describe("Authentication", () => {
       // Check form elements
       await expect(page.getByLabel(/email/i)).toBeVisible();
       await expect(page.getByLabel(/password/i)).toBeVisible();
-      await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
     });
 
     test("should show validation errors for empty form", async ({ page }) => {
       await page.goto("/login");
 
       // Submit empty form
-      await page.getByRole("button", { name: /sign in/i }).click();
+      await page.getByRole("button", { name: "Sign in", exact: true }).click();
+
 
       // Check for validation (form should not submit with empty fields)
       // The form has HTML5 validation, so it won't submit
@@ -33,7 +34,7 @@ test.describe("Authentication", () => {
       await page.getByLabel(/password/i).fill("wrongpassword123");
 
       // Submit form
-      await page.getByRole("button", { name: /sign in/i }).click();
+      await page.getByRole("button", { name: "Sign in", exact: true }).click();
 
       // Wait for error message (toast or inline error)
       // Note: This may need adjustment based on actual error handling
@@ -43,7 +44,7 @@ test.describe("Authentication", () => {
     test("should have link to register page", async ({ page }) => {
       await page.goto("/login");
 
-      const registerLink = page.getByRole("link", { name: /sign up/i });
+      const registerLink = page.getByRole("link", { name: "Sign up", exact: true });
       await expect(registerLink).toBeVisible();
 
       await registerLink.click();
@@ -75,7 +76,7 @@ test.describe("Authentication", () => {
     test("should have link to login page", async ({ page }) => {
       await page.goto("/register");
 
-      const loginLink = page.getByRole("link", { name: /sign in/i });
+      const loginLink = page.getByRole("link", { name: "Sign in", exact: true });
       await expect(loginLink).toBeVisible();
 
       await loginLink.click();
@@ -98,7 +99,7 @@ test.describe("Authentication", () => {
     test("should have link back to login", async ({ page }) => {
       await page.goto("/forgot-password");
 
-      const loginLink = page.getByRole("link", { name: /back to login/i });
+      const loginLink = page.getByRole("link", { name: "Sign in", exact: true });
       await expect(loginLink).toBeVisible();
     });
   });
