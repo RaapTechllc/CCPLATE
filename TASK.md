@@ -4,7 +4,30 @@
 
 ## Current Sprint
 
-### 🚨 Priority 1: Security Fixes (Do First)
+### 🚀 Priority 1: Phase 6.2 - Advanced Guardian Features
+
+#### Schema Lock System
+- [ ] Implement schema-lock.ts with acquire/release
+- [ ] Update path-guard to check schema lock
+- [ ] Add CLI: ccplate schema lock/unlock/status
+
+#### Knowledge Mesh (Cross-Worktree Intelligence)
+- [ ] Implement knowledge-mesh.ts with broadcast/inject
+- [ ] Update guardian-tick to inject knowledge
+- [ ] Add CLI: ccplate mesh broadcast/list/inject
+
+#### Human-in-the-Loop (HITL) System
+- [ ] Implement hitl.ts with request/resolve
+- [ ] Add detection for destructive operations
+- [ ] Add CLI: ccplate hitl list/approve/reject
+- [ ] Placeholder for Slack/Discord webhooks
+
+#### Worktree Preflight
+- [ ] Implement preflight.ts validation
+- [ ] Add auto-fix for common issues
+- [ ] Add CLI: ccplate worktree validate/fix
+
+### 🚨 Priority 2: Security Fixes
 
 - [ ] **Add rate limiting to AI endpoints** [Medium Risk]
   - [ ] `src/app/api/api-builder/generate/route.ts`
@@ -21,7 +44,7 @@
   - [ ] Audit `src/lib/agent-builder/tools/*.ts`
   - [ ] Add input validation/sanitization
 
-### 📦 Priority 2: Dependency Updates
+### 📦 Priority 3: Dependency Updates
 
 - [ ] **Patch Prisma** (safe, no breaking changes)
   ```bash
@@ -38,7 +61,7 @@
   - [ ] Assess migration effort
   - [ ] Decision: migrate or defer
 
-### 🔧 Priority 3: Guardian Enhancements
+### 🔧 Priority 4: Guardian Enhancements
 
 - [ ] **Wire progress nudge detection**
   - [ ] Implement "off-topic" detection in guardian-tick.ts
@@ -58,7 +81,7 @@
   - [ ] Log malformed input instead of silent exit
   - [ ] Write to `memory/guardian-errors.log`
 
-### 🧪 Priority 4: Testing & Validation
+### 🧪 Priority 5: Testing & Validation
 
 - [ ] **Run Guardian test suite**
   ```bash
@@ -77,7 +100,7 @@
   - [ ] Test all builder generation endpoints
   - [ ] Verify Guardian nudges in real session
 
-### 🎨 Priority 5: Polish & Documentation
+### 🎨 Priority 6: Polish & Documentation
 
 - [ ] **Multi-language LSP support** (from spec)
   - [ ] Add gopls for Go
@@ -157,6 +180,12 @@
 ---
 
 ## Backlog
+
+### Phase 6.3+ - Future Guardian Evolution
+- [ ] **Fleet Commander** - Multi-issue orchestration across worktrees
+- [ ] **Agent Pulse** - Real-time WebSocket stream for Guardian events
+- [ ] **Artifact Versioning** - Rollback/retry for generated artifacts
+- [ ] **Native TUI** - Rust-based terminal UI for Guardian
 
 ### Future Enhancements
 - [ ] Password reset flow with email (backend complete, needs testing)

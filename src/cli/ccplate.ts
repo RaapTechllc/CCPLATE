@@ -6,6 +6,20 @@ import { join, resolve } from "path";
 import { LSPClient, createLSPClient } from "../lsp/sidecar";
 import { getAllJobs, getJob } from "../lib/guardian/job-queue";
 import { processQueue } from "../lib/guardian/job-executor";
+import { 
+  getPendingHITLRequests, 
+  getHITLRequest, 
+  resolveHITLRequest, 
+  getAllHITLRequests 
+} from "../lib/guardian/hitl";
+import { 
+  broadcast, 
+  getKnowledge, 
+  formatKnowledgeForPrompt,
+  type KnowledgeType 
+} from "../lib/guardian/knowledge-mesh";
+import { runPreflightChecks, autoFixWorktree, formatPreflightResult } from "../lib/guardian/preflight";
+import { acquireSchemaLock, releaseSchemaLock, getSchemaLockStatus } from "../lib/guardian/schema-lock";
 
 const ROOT_DIR = resolve(import.meta.dir, "../..");
 const CONFIG_PATH = join(ROOT_DIR, "ccplate.config.json");
@@ -134,10 +148,67 @@ function createWorktree(taskId: string): void {
     });
     saveWorkflowState(state);
     console.log(`✓ Updated workflow-state.json`);
+
+    // Run preflight checks
+    const preflightResult = runPreflightChecks(fullPath, taskId);
+    console.log(formatPreflightResult(preflightResult));
   } catch (error) {
     console.error(`Error creating worktree: ${(error as Error).message}`);
     process.exit(1);
   }
+}
+
+function validateWorktree(taskId: string): void {
+  validateTaskId(taskId);
+  const state = loadWorkflowState();
+
+  const worktree = state.active_worktrees.find((w) => w.id === taskId);
+  if (!worktree) {
+    console.error(`Error: Worktree '${taskId}' not found`);
+    process.exit(1);
+  }
+
+  const fullPath = join(ROOT_DIR, worktree.path);
+  if (!existsSync(fullPath)) {
+    console.error(`Error: Worktree path does not exist: ${fullPath}`);
+    process.exit(1);
+  }
+
+  const result = runPreflightChecks(fullPath, taskId);
+  console.log(formatPreflightResult(result));
+  process.exit(result.passed ? 0 : 1);
+}
+
+function fixWorktree(taskId: string): void {
+  validateTaskId(taskId);
+  const state = loadWorkflowState();
+
+  const worktree = state.active_worktrees.find((w) => w.id === taskId);
+  if (!worktree) {
+    console.error(`Error: Worktree '${taskId}' not found`);
+    process.exit(1);
+  }
+
+  const fullPath = join(ROOT_DIR, worktree.path);
+  if (!existsSync(fullPath)) {
+    console.error(`Error: Worktree path does not exist: ${fullPath}`);
+    process.exit(1);
+  }
+
+  console.log(`🔧 Auto-fixing worktree: ${taskId}\n`);
+  const fixes = autoFixWorktree(fullPath);
+  
+  if (fixes.length === 0) {
+    console.log("No fixes needed or no auto-fixable issues found.");
+  } else {
+    for (const fix of fixes) {
+      console.log(`   ✓ ${fix}`);
+    }
+  }
+
+  console.log("\n📋 Running validation...");
+  const result = runPreflightChecks(fullPath, taskId);
+  console.log(formatPreflightResult(result));
 }
 
 function listWorktrees(): void {
@@ -318,6 +389,70 @@ async function generateApi(description: string): Promise<void> {
   console.log(`        -d '{"description": "${description}"}'`);
 }
 
+// ==================== SCHEMA LOCK COMMANDS ====================
+
+function getCurrentWorktreeId(): string {
+  try {
+    const gitDir = execSync("git rev-parse --git-dir", { cwd: ROOT_DIR, encoding: "utf-8" }).trim();
+    if (gitDir.includes(".worktrees/")) {
+      const match = gitDir.match(/\.worktrees\/([^/]+)/);
+      if (match) return match[1];
+    }
+    return "main";
+  } catch {
+    return "main";
+  }
+}
+
+function schemaLock(): void {
+  const worktreeId = getCurrentWorktreeId();
+  const result = acquireSchemaLock(worktreeId, "edit");
+  
+  if (result.acquired) {
+    console.log(`✓ ${result.message}`);
+    console.log(`  Worktree: ${worktreeId}`);
+    console.log(`  Expires in 30 minutes`);
+  } else {
+    console.error(`✗ ${result.message}`);
+    if (result.holder) {
+      console.error(`  Acquired: ${result.holder.acquiredAt}`);
+      console.error(`  Expires: ${result.holder.expiresAt}`);
+    }
+    process.exit(1);
+  }
+}
+
+function schemaUnlock(): void {
+  const worktreeId = getCurrentWorktreeId();
+  const released = releaseSchemaLock(worktreeId);
+  
+  if (released) {
+    console.log(`✓ Schema lock released`);
+  } else {
+    console.error(`✗ Cannot release lock - held by different worktree`);
+    process.exit(1);
+  }
+}
+
+function schemaStatus(): void {
+  const lock = getSchemaLockStatus();
+  
+  if (!lock) {
+    console.log("Schema is unlocked");
+  } else {
+    console.log("Schema Lock Status:");
+    console.log(`  Worktree: ${lock.worktreeId}`);
+    console.log(`  Operation: ${lock.operation}`);
+    console.log(`  Acquired: ${lock.acquiredAt}`);
+    console.log(`  Expires: ${lock.expiresAt}`);
+    
+    const remaining = new Date(lock.expiresAt).getTime() - Date.now();
+    const minutes = Math.floor(remaining / 60000);
+    const seconds = Math.floor((remaining % 60000) / 1000);
+    console.log(`  Time remaining: ${minutes}m ${seconds}s`);
+  }
+}
+
 async function lspSymbols(path: string): Promise<void> {
   if (!path) {
     console.error("Error: Missing path");
@@ -357,7 +492,13 @@ ccplate - CCPLATE Guardian CLI
 Usage:
   ccplate worktree create <task-id>   Create isolated worktree for a task
   ccplate worktree list               List active worktrees
+  ccplate worktree validate <task-id> Run preflight checks on worktree
+  ccplate worktree fix <task-id>      Auto-fix common worktree issues
   ccplate worktree cleanup <task-id>  Remove worktree after merge
+
+  ccplate schema lock                 Acquire schema lock for current worktree
+  ccplate schema unlock               Release schema lock
+  ccplate schema status               Show current schema lock status
 
   ccplate lsp definition <file>:<line>:<column>   Get definition location
   ccplate lsp references <symbol> [--limit N]     Find all references to symbol
@@ -372,10 +513,24 @@ Usage:
   ccplate jobs get <job-id>                       Get details of a specific job
   ccplate jobs process                            Process pending jobs
 
+  ccplate mesh broadcast <type> <title> <content> Broadcast knowledge to mesh
+  ccplate mesh list [--since <minutes>]           List recent knowledge entries
+  ccplate mesh inject                             Output formatted knowledge for prompts
+
+  ccplate hitl list                               List pending HITL requests
+  ccplate hitl show <id>                          Show request details
+  ccplate hitl approve <id> [--by <name>] [--notes <text>]  Approve a request
+  ccplate hitl reject <id> [--by <name>] [--notes <text>]   Reject a request
+
 Examples:
   ccplate worktree create oauth-api
   ccplate worktree list
+  ccplate worktree validate oauth-api
+  ccplate worktree fix oauth-api
   ccplate worktree cleanup oauth-api
+
+  ccplate schema lock
+  ccplate schema status
 
   ccplate lsp definition src/lib/auth.ts:15:10
   ccplate lsp references signIn --limit 20
@@ -423,6 +578,20 @@ async function main(): Promise<void> {
       case "list":
         listWorktrees();
         break;
+      case "validate":
+        if (!taskId) {
+          console.error("Error: Missing task-id\nUsage: ccplate worktree validate <task-id>");
+          process.exit(1);
+        }
+        validateWorktree(taskId);
+        break;
+      case "fix":
+        if (!taskId) {
+          console.error("Error: Missing task-id\nUsage: ccplate worktree fix <task-id>");
+          process.exit(1);
+        }
+        fixWorktree(taskId);
+        break;
       case "cleanup":
         if (!taskId) {
           console.error("Error: Missing task-id\nUsage: ccplate worktree cleanup <task-id>");
@@ -452,6 +621,22 @@ async function main(): Promise<void> {
       await generateApi(args.slice(2).join(" "));
     } else {
       console.log("Usage: ccplate api generate <description>");
+    }
+  } else if (command === "schema") {
+    switch (subcommand) {
+      case "lock":
+        schemaLock();
+        break;
+      case "unlock":
+        schemaUnlock();
+        break;
+      case "status":
+        schemaStatus();
+        break;
+      default:
+        console.error(`Unknown schema command: ${subcommand}`);
+        console.log("Usage: ccplate schema [lock|unlock|status]");
+        process.exit(1);
     }
   } else if (command === "lsp") {
     switch (subcommand) {
@@ -522,6 +707,154 @@ async function main(): Promise<void> {
         break;
       default:
         console.error(`Unknown jobs command: ${subcommand}`);
+        printHelp();
+        process.exit(1);
+    }
+  } else if (command === "mesh") {
+    switch (subcommand) {
+      case "broadcast": {
+        const type = taskId as KnowledgeType;
+        const validTypes = ['discovery', 'warning', 'pattern', 'dependency', 'blocker', 'resolution'];
+        if (!validTypes.includes(type)) {
+          console.error(`Error: Invalid type '${type}'`);
+          console.error(`Valid types: ${validTypes.join(', ')}`);
+          process.exit(1);
+        }
+        const title = args[3];
+        const priorityIndex = args.indexOf('--priority');
+        const contentEndIndex = priorityIndex !== -1 ? priorityIndex : args.length;
+        const content = args.slice(4, contentEndIndex).join(' ');
+        if (!title || !content) {
+          console.error("Usage: ccplate mesh broadcast <type> <title> <content> [--priority <level>]");
+          console.error("  Types: discovery, warning, pattern, dependency, blocker, resolution");
+          console.error("  Priority: low, medium, high, critical (default: medium)");
+          process.exit(1);
+        }
+        const priority = priorityIndex !== -1 ? args[priorityIndex + 1] as 'low' | 'medium' | 'high' | 'critical' : 'medium';
+        const worktreeId = process.env.CCPLATE_WORKTREE || 'main';
+        const agentName = process.env.CCPLATE_AGENT || 'cli';
+        
+        const entry = broadcast({
+          worktreeId,
+          agentName,
+          type,
+          title,
+          content,
+          priority,
+        });
+        console.log(`✓ Broadcasted: ${entry.id}`);
+        console.log(`  Type: ${entry.type}, Priority: ${entry.priority}`);
+        console.log(`  From: ${entry.worktreeId} (${entry.agentName})`);
+        break;
+      }
+      case "list": {
+        const sinceIndex = args.indexOf('--since');
+        let since: Date | undefined;
+        if (sinceIndex !== -1 && args[sinceIndex + 1]) {
+          const minutes = parseInt(args[sinceIndex + 1], 10);
+          if (!isNaN(minutes)) {
+            since = new Date(Date.now() - minutes * 60 * 1000);
+          }
+        }
+        const entries = getKnowledge({ since });
+        if (entries.length === 0) {
+          console.log("No knowledge entries found");
+        } else {
+          console.log(`Knowledge Mesh (${entries.length} entries):\n`);
+          for (const e of entries) {
+            const time = new Date(e.timestamp).toLocaleTimeString();
+            const priority = e.priority === 'critical' ? '🔴' : e.priority === 'high' ? '🟠' : e.priority === 'medium' ? '🟡' : '⚪';
+            console.log(`${priority} [${e.type.toUpperCase()}] ${e.title}`);
+            console.log(`   ${e.content}`);
+            console.log(`   From: ${e.worktreeId} (${e.agentName}) at ${time}\n`);
+          }
+        }
+        break;
+      }
+      case "inject": {
+        const excludeWorktree = process.env.CCPLATE_WORKTREE;
+        const entries = getKnowledge({ 
+          excludeWorktree,
+          minPriority: 'medium' 
+        });
+        const formatted = formatKnowledgeForPrompt(entries);
+        if (formatted) {
+          console.log(formatted);
+        } else {
+          console.log("No knowledge to inject");
+        }
+        break;
+      }
+      default:
+        console.error(`Unknown mesh command: ${subcommand}`);
+        printHelp();
+        process.exit(1);
+    }
+  } else if (command === "hitl") {
+    switch (subcommand) {
+      case "list": {
+        const pending = getPendingHITLRequests();
+        if (pending.length === 0) {
+          console.log("No pending HITL requests");
+        } else {
+          console.log(`Pending HITL Requests (${pending.length}):\n`);
+          for (const req of pending) {
+            const created = new Date(req.createdAt).toLocaleString();
+            console.log(`🚨 ${req.id}`);
+            console.log(`   Title: ${req.title}`);
+            console.log(`   Reason: ${req.reason}`);
+            console.log(`   Created: ${created}`);
+            if (req.jobId) console.log(`   Job: ${req.jobId}`);
+            if (req.worktreeId) console.log(`   Worktree: ${req.worktreeId}`);
+            console.log();
+          }
+        }
+        break;
+      }
+      case "show": {
+        if (!taskId) {
+          console.error("Error: Missing request ID\nUsage: ccplate hitl show <id>");
+          process.exit(1);
+        }
+        const req = getHITLRequest(taskId);
+        if (!req) {
+          console.error(`HITL request not found: ${taskId}`);
+          process.exit(1);
+        }
+        console.log(JSON.stringify(req, null, 2));
+        break;
+      }
+      case "approve":
+      case "reject": {
+        if (!taskId) {
+          console.error(`Error: Missing request ID\nUsage: ccplate hitl ${subcommand} <id>`);
+          process.exit(1);
+        }
+        const byIndex = args.indexOf('--by');
+        const resolvedBy = byIndex !== -1 && args[byIndex + 1] ? args[byIndex + 1] : 'cli-user';
+        const notesIndex = args.indexOf('--notes');
+        const notes = notesIndex !== -1 ? args.slice(notesIndex + 1).join(' ') : undefined;
+        
+        const result = resolveHITLRequest(
+          taskId,
+          subcommand === 'approve' ? 'approved' : 'rejected',
+          resolvedBy,
+          notes
+        );
+        
+        if (!result) {
+          console.error(`HITL request not found: ${taskId}`);
+          process.exit(1);
+        }
+        
+        const emoji = subcommand === 'approve' ? '✅' : '❌';
+        console.log(`${emoji} Request ${subcommand}ed: ${taskId}`);
+        console.log(`   By: ${resolvedBy}`);
+        if (notes) console.log(`   Notes: ${notes}`);
+        break;
+      }
+      default:
+        console.error(`Unknown hitl command: ${subcommand}`);
         printHelp();
         process.exit(1);
     }
