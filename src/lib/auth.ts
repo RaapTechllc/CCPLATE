@@ -111,7 +111,7 @@ export const authOptions: NextAuthOptions = {
   events: {
     async createUser({ user }) {
       // Log new user creation (useful for monitoring)
-      console.log(`New user created: ${user.email}`);
+      console.log(`New user created: ${user.id}`);
     },
   },
 

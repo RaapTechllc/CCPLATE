@@ -6,6 +6,7 @@ import { successResponse, errorResponse } from "@/lib/api/response";
 import { ApiError } from "@/lib/api/errors";
 import { bulkSettingsUpdateSchema } from "@/lib/validations/admin";
 import { getAll, getAllGrouped, bulkUpdate } from "@/lib/services/settings-service";
+import { logAuditEvent } from "@/lib/audit-log";
 
 /**
  * Handle errors consistently across all route handlers
@@ -97,8 +98,39 @@ export async function PUT(request: NextRequest) {
       return errorResponse("VALIDATION_ERROR", "No settings provided", 400);
     }
 
+    // Fetch current settings for audit comparison
+    const currentSettings = await getAll();
+    const currentSettingsMap = new Map(
+      currentSettings.map((s) => [s.key, s.value])
+    );
+
     // Bulk update settings
     const updatedSettings = await bulkUpdate(settingsToUpdate);
+
+    // Build audit log changes
+    const changes: Record<string, { old: unknown; new: unknown }> = {};
+    for (const setting of settingsToUpdate) {
+      const oldValue = currentSettingsMap.get(setting.key);
+      if (oldValue !== setting.value) {
+        changes[setting.key] = {
+          old: oldValue ?? null,
+          new: setting.value,
+        };
+      }
+    }
+
+    // Log audit event if there were actual changes
+    if (Object.keys(changes).length > 0) {
+      const ip = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined;
+      logAuditEvent({
+        userId: session.user.id,
+        userEmail: session.user.email || "unknown",
+        action: "UPDATE",
+        resource: "admin/settings",
+        changes,
+        ip: ip || undefined,
+      });
+    }
 
     return successResponse(updatedSettings);
   } catch (error) {

@@ -3,6 +3,7 @@
  * Handles file upload, retrieval, and deletion operations
  */
 
+import { fileTypeFromBuffer } from "file-type";
 import { prisma } from "@/lib/db";
 import { getStorageAdapter } from "@/lib/storage";
 import {
@@ -35,6 +36,43 @@ export class FileServiceError extends Error {
     super(message);
     this.name = "FileServiceError";
   }
+}
+
+/**
+ * Validate that file content matches declared MIME type using magic bytes
+ * Prevents MIME type spoofing attacks
+ *
+ * @param buffer - File content as Buffer
+ * @param declaredMimeType - MIME type declared by client
+ * @returns true if content matches declared type, false otherwise
+ */
+async function validateFileContent(
+  buffer: Buffer,
+  declaredMimeType: string
+): Promise<boolean> {
+  const detected = await fileTypeFromBuffer(buffer);
+
+  // Allow text files (no magic bytes) - they can't be detected
+  if (!detected && declaredMimeType.startsWith("text/")) {
+    return true;
+  }
+
+  // Allow application/octet-stream as fallback type
+  if (!detected && declaredMimeType === "application/octet-stream") {
+    return true;
+  }
+
+  // If we detected a type, it must match the declared type
+  if (detected && detected.mime !== declaredMimeType) {
+    return false;
+  }
+
+  // If no type detected and not a text/octet-stream type, reject
+  if (!detected) {
+    return false;
+  }
+
+  return true;
 }
 
 /**
@@ -110,6 +148,15 @@ export async function uploadFile(
     throw new FileServiceError(
       `File size ${buffer.length} exceeds maximum allowed size of ${maxSize} bytes`,
       "FILE_TOO_LARGE"
+    );
+  }
+
+  // Validate file content matches declared MIME type (magic byte validation)
+  const contentValid = await validateFileContent(buffer, mimeType);
+  if (!contentValid) {
+    throw new FileServiceError(
+      "File content does not match declared MIME type",
+      "MIME_TYPE_MISMATCH"
     );
   }
 

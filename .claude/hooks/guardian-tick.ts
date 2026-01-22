@@ -536,8 +536,21 @@ async function main(): Promise<void> {
   try {
     const text = await Bun.stdin.text();
     input = JSON.parse(text) as HookInput;
-  } catch {
-    // Can't parse input, just exit silently
+  } catch (error) {
+    const errorLog = {
+      timestamp: new Date().toISOString(),
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      type: "input_parse_error",
+    };
+    
+    const errorLogPath = join(MEMORY_DIR, "guardian-errors.log");
+    try {
+      appendFileSync(errorLogPath, JSON.stringify(errorLog) + "\n");
+    } catch {
+      // Can't write log, just exit
+    }
+    
     process.exit(0);
   }
 
