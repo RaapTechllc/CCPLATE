@@ -1,0 +1,15 @@
+{
+  "lastNudge": {
+    "type": null,
+    "timestamp": null,
+    "toolUseCount": 0
+  },
+  "mutedNudges": [],
+  "sessionStats": {
+    "nudgesGenerated": 0,
+    "nudgesActedOn": 0,
+    "commitsPrompted": 0,
+    "testsPrompted": 0,
+    "errorsPrompted": 0
+  }
+}

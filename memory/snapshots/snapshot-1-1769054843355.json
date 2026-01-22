@@ -1,0 +1,14 @@
+{
+  "id": "snapshot-1-1769054843355",
+  "step": 1,
+  "timestamp": "2026-01-22T04:07:23.355Z",
+  "gitCommit": "a464e883d82f57614adaee7500cef46009a58b82",
+  "gitBranch": "master",
+  "description": "Test snapshot for snapshots feature",
+  "validationPassed": true,
+  "files": {
+    "workflowState": "/Users/timraap/CCPLATE/memory/snapshots/snapshot-1-1769054843355-workflow-state.json",
+    "activityLog": "/Users/timraap/CCPLATE/memory/snapshots/snapshot-1-1769054843355-ACTIVITY.md",
+    "guardianState": "/Users/timraap/CCPLATE/memory/snapshots/snapshot-1-1769054843355-guardian-state.json"
+  }
+}
