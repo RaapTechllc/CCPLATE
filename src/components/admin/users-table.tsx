@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Spinner } from "@/components/ui/spinner";
 import type { UserDetails } from "@/types/admin";
@@ -115,10 +116,13 @@ export function UsersTable({ users, loading }: UsersTableProps) {
               <td className="px-4 py-4">
                 <div className="flex items-center gap-3">
                   {user.image ? (
-                    <img
+                    <Image
                       src={user.image}
                       alt={user.name || user.email}
+                      width={40}
+                      height={40}
                       className="h-10 w-10 rounded-full object-cover"
+                      unoptimized
                     />
                   ) : (
                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-200 dark:bg-zinc-700">

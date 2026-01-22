@@ -4,7 +4,7 @@ import { readFile, writeFile } from "fs/promises";
 import { exec } from "child_process";
 import { promisify } from "util";
 import path from "path";
-import type { Worktree, WorkflowState, WorktreeStatus, ActiveWorktree } from "@/types/worktree";
+import type { Worktree, WorkflowState, WorktreeStatus } from "@/types/worktree";
 
 const execAsync = promisify(exec);
 const WORKFLOW_STATE_PATH = path.join(process.cwd(), "memory/workflow-state.json");

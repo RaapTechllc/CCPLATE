@@ -16,8 +16,6 @@ import type {
   FileListQuery,
   PaginatedFiles,
   UploadOptions,
-  ALLOWED_FILE_TYPES,
-  MAX_FILE_SIZE,
 } from "@/types/file";
 import { StorageType } from "@/generated/prisma/client";
 

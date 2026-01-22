@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
@@ -121,10 +122,13 @@ export function AdminHeader({ user }: AdminHeaderProps) {
         >
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-200 text-sm font-medium text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300">
             {user.image ? (
-              <img
+              <Image
                 src={user.image}
                 alt={user.name || "User avatar"}
+                width={32}
+                height={32}
                 className="h-8 w-8 rounded-full object-cover"
+                unoptimized
               />
             ) : (
               userInitial

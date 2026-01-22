@@ -49,12 +49,11 @@ export class LocalStorageAdapter implements StorageAdapter {
   /**
    * Upload a file to local storage
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async upload(
     file: Buffer,
     filename: string,
-    mimeType: string,
-    options?: UploadOptions
+    _mimeType: string,
+    _options?: UploadOptions
   ): Promise<StorageResult> {
     const filePath = this.getFilePath(filename);
 

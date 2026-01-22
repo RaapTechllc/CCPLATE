@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { useCallback, useState, useRef } from "react"
+import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { Spinner } from "./spinner"
 
@@ -127,10 +128,12 @@ export function AvatarUpload({
         />
 
         {displayImage ? (
-          <img
+          <Image
             src={displayImage}
             alt="Avatar"
+            fill
             className="h-full w-full object-cover"
+            unoptimized
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center">

@@ -17,7 +17,7 @@
 | Database | PostgreSQL | Robust relational database, great for structured data |
 | ORM | Prisma | Type-safe queries, migrations, excellent DX |
 | Styling | Tailwind CSS | Utility-first, fast development |
-| Auth | TBD | To be decided based on requirements |
+| Auth | NextAuth.js v4 | Credentials + OAuth (GitHub, Google), session handling |
 | Hosting | Vercel | Optimized for Next.js, easy deployment |
 
 ## Design Decisions
@@ -41,15 +41,20 @@
 
 ### Critical (App won't work without)
 
-- [None documented yet]
+- **Prisma** - Type-safe ORM, database migrations
+- **NextAuth.js v4** - Authentication (credentials + OAuth)
+- **PostgreSQL** - Primary database
 
 ### Important (Core features need)
 
-- [None documented yet]
+- **OpenAI SDK** - AI-powered builders (hook, component, schema, etc.)
+- **Anthropic SDK** - Alternative AI provider
+- **Zod** - Input validation and schema definition
 
 ### Nice-to-have (Enhanced functionality)
 
-- [None documented yet]
+- **Resend** - Transactional emails (password reset, verification)
+- **Playwright** - E2E testing and validation harness
 
 ## Data Flow
 
@@ -66,10 +71,10 @@ User → Frontend → API → Database
 
 ## Security Considerations
 
-- [ ] Authentication method decided
-- [ ] Authorization model defined
-- [ ] Secrets management approach
-- [ ] Input validation strategy
+- [x] Authentication method decided (NextAuth.js v4 with credentials + OAuth)
+- [x] Authorization model defined (role-based: user/admin)
+- [x] Secrets management approach (environment variables via `.env.local`)
+- [x] Input validation strategy (Zod schemas on all API endpoints)
 - [ ] CORS/CSP policies
 
 ## Performance Targets

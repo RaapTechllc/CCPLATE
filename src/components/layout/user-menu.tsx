@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { useSession, signOut } from "next-auth/react"
 import { cn } from "@/lib/utils"
 
@@ -64,10 +65,13 @@ export function UserMenu({ className }: UserMenuProps) {
       >
         <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-sm font-medium text-zinc-700 dark:text-zinc-300">
           {session.user.image ? (
-            <img
+            <Image
               src={session.user.image}
               alt={session.user.name || "User avatar"}
+              width={32}
+              height={32}
               className="w-8 h-8 rounded-full object-cover"
+              unoptimized
             />
           ) : (
             userInitial

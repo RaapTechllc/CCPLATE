@@ -1,5 +1,3 @@
-import { z } from "zod";
-
 // Allowed MIME types for uploads
 export const ALLOWED_IMAGE_TYPES = [
   "image/jpeg",

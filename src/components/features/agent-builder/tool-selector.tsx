@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Tool } from "@/lib/agent-builder/schema";
 import { builtInToolsList } from "@/lib/agent-builder/tools";
 

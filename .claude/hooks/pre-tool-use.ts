@@ -26,7 +26,7 @@ interface AllowResponse {
   decision: "approve";
 }
 
-type HookResponse = BlockResponse | AllowResponse;
+export type HookResponse = BlockResponse | AllowResponse;
 
 // Dangerous command patterns - add more as you discover them
 const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
@@ -144,7 +144,7 @@ async function main(): Promise<void> {
     // Read JSON from stdin
     const text = await Bun.stdin.text();
     input = JSON.parse(text) as HookInput;
-  } catch (error) {
+  } catch {
     // If we can't parse input, block by default
     const response: BlockResponse = {
       decision: "block",

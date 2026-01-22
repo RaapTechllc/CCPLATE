@@ -122,7 +122,7 @@ export function AgentCard({ agent, activity, className }: AgentCardProps) {
 
         {agent.filePath && (
           <a
-            href={`vscode://file/${process.cwd()}/${agent.filePath}`}
+            href={`vscode://file/${agent.filePath}`}
             className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline dark:text-blue-400"
           >
             View Definition →

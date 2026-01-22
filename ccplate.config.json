@@ -20,11 +20,17 @@
       },
       "error": {
         "enabled": true
+      },
+      "playwright": {
+        "enabled": true
       }
     },
     "cooldown": {
       "minutes": 10,
       "toolUses": 5
+    },
+    "narrator": {
+      "enabled": true
     }
   },
   "worktrees": {

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type {
-  SystemSetting,
   SettingsByCategory,
   BulkSettingUpdate,
 } from "@/types/settings";

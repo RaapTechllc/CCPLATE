@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import Image from "next/image";
 import { showToast } from "@/lib/toast";
 import { updateAvatarAction } from "@/lib/actions/profile.actions";
 
@@ -69,10 +70,13 @@ export function ProfileAvatarForm({
 
       <div className="relative mb-4">
         {previewUrl ? (
-          <img
+          <Image
             src={previewUrl}
             alt="Profile"
+            width={96}
+            height={96}
             className="h-24 w-24 rounded-full object-cover"
+            unoptimized
           />
         ) : (
           <div className="flex h-24 w-24 items-center justify-center rounded-full bg-blue-100 text-3xl font-bold text-blue-600">

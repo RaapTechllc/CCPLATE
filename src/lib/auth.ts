@@ -111,7 +111,9 @@ export const authOptions: NextAuthOptions = {
   events: {
     async createUser({ user }) {
       // Log new user creation (useful for monitoring)
-      console.log(`New user created: ${user.id}`);
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`New user created: ${user.id}`);
+      }
     },
   },
 

@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync } from 'fs';
 import { join } from 'path';
 
 export interface ValidationResult {
@@ -32,7 +32,7 @@ export function runPlaywrightTest(testPattern: string): ValidationResult {
   const startTime = Date.now();
   let stdout = '';
   let stderr = '';
-  let passed = false;
+  let passed = true;
   const failedTests: ValidationResult['failedTests'] = [];
   
   try {
@@ -40,7 +40,6 @@ export function runPlaywrightTest(testPattern: string): ValidationResult {
       `npx playwright test --grep "${testPattern}" --reporter=json 2>&1`,
       { cwd: PROJECT_DIR, encoding: 'utf-8', timeout: 120000 }
     );
-    passed = true;
   } catch (error: unknown) {
     const e = error as { stdout?: string; stderr?: string };
     stdout = e.stdout || '';

@@ -1,4 +1,4 @@
-import type { ComponentSpec, Prop } from "../spec";
+import type { ComponentSpec } from "../spec";
 
 export function baseTemplate(spec: ComponentSpec): string {
   const imports = generateImports(spec);

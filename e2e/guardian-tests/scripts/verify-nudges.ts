@@ -56,21 +56,13 @@ function loadLastNudge(): string | null {
   return readFileSync(path, "utf-8").trim();
 }
 
-function loadWorkflowState(): Record<string, unknown> | null {
-  const path = join(MEMORY_DIR, "workflow-state.json");
-  if (!existsSync(path)) {
-    return null;
-  }
-  return JSON.parse(readFileSync(path, "utf-8"));
-}
+
 
 // ============== TESTS ==============
 
 function verifyCommitNudge(): TestResult {
   const nudges = loadNudges();
   const commitNudges = nudges.filter(n => n.type === "commit");
-  const lastNudge = loadLastNudge();
-  
   if (commitNudges.length === 0) {
     return {
       name: "Commit Nudge",

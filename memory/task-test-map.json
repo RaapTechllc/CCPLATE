@@ -1,0 +1,8 @@
+[
+  {
+    "taskId": "auth-task",
+    "testPatterns": [
+      "auth.spec.ts"
+    ]
+  }
+]

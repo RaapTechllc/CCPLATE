@@ -20,7 +20,7 @@ export function OAuthButtons({ mode = "signin" }: OAuthButtonsProps) {
     setLoadingProvider(provider)
     try {
       await signIn(provider, { callbackUrl })
-    } catch (error) {
+    } catch {
       // Error handling is managed by NextAuth
       setLoadingProvider(null)
     }

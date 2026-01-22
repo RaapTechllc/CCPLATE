@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPrompt, testPrompt } from "@/lib/prompt-builder";
 import { rateLimit } from "@/lib/rate-limit";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 const aiRateLimit = { interval: 60000, maxRequests: 10 };
 
@@ -9,6 +11,11 @@ interface RouteContext {
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "anonymous";
   const rateLimitResult = rateLimit(`prompt-test:${ip}`, aiRateLimit);
   if (!rateLimitResult.success) {

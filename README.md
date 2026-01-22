@@ -155,6 +155,47 @@ src/
 - **AI**: OpenAI / Anthropic
 - **Email**: Resend
 
+## Guardian System
+
+CCPLATE includes a Guardian system for AI workflow supervision and parallel development.
+
+### What it Does
+
+- **Workflow Monitoring** - Tracks file changes, commit frequency, test coverage
+- **Smart Nudges** - Reminds agents to commit, test, or fix errors
+- **Worktree Isolation** - Parallel agents work in isolated git worktrees
+- **Validation Harness** - Playwright-based task completion verification
+
+### Key CLI Commands
+
+```bash
+# Worktree management
+ccplate worktree create <task-id>   # Create isolated worktree
+ccplate worktree list               # List active worktrees
+ccplate worktree cleanup <task-id>  # Remove after merge
+
+# Validation
+ccplate validate run                # Run Playwright tests
+ccplate validate check <task-id>    # Check if task can complete
+
+# Activity tracking
+ccplate activity status             # Show current loop
+ccplate activity start <task>       # Log task start
+```
+
+### State Storage
+
+Guardian state is stored in the `memory/` directory:
+
+| File | Purpose |
+|------|---------|
+| `workflow-state.json` | Active session, worktrees, context pressure |
+| `guardian-nudges.jsonl` | History of all nudges |
+| `context-ledger.json` | RLM-lite context tracking |
+| `ACTIVITY.md` | Human-readable activity log |
+
+See [docs/GUARDIAN-WORKFLOW.md](docs/GUARDIAN-WORKFLOW.md) for detailed workflows.
+
 ## License
 
 MIT

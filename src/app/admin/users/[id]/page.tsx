@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UserDetailClient } from "./user-detail-client";
@@ -88,10 +89,13 @@ export default async function UserDetailPage({ params }: PageProps) {
       {/* User Header */}
       <div className="flex items-start gap-6">
         {user.image ? (
-          <img
+          <Image
             src={user.image}
             alt={user.name || user.email}
+            width={80}
+            height={80}
             className="h-20 w-20 rounded-full object-cover"
+            unoptimized
           />
         ) : (
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-zinc-200 dark:bg-zinc-700">

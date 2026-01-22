@@ -3,14 +3,13 @@
 import { execSync } from "child_process";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, resolve } from "path";
-import { LSPClient, createLSPClient } from "../lsp/sidecar";
+import { createLSPClient } from "../lsp/sidecar";
 import { getAllJobs, getJob } from "../lib/guardian/job-queue";
 import { processQueue } from "../lib/guardian/job-executor";
 import { 
   getPendingHITLRequests, 
   getHITLRequest, 
-  resolveHITLRequest, 
-  getAllHITLRequests 
+  resolveHITLRequest,
 } from "../lib/guardian/hitl";
 import { 
   broadcast, 
@@ -20,6 +19,37 @@ import {
 } from "../lib/guardian/knowledge-mesh";
 import { runPreflightChecks, autoFixWorktree, formatPreflightResult } from "../lib/guardian/preflight";
 import { acquireSchemaLock, releaseSchemaLock, getSchemaLockStatus } from "../lib/guardian/schema-lock";
+import { 
+  runInteractiveInterview, 
+  savePRD, 
+  loadPRD, 
+  updateWorkflowStateWithPRD,
+} from "../lib/guardian/prd";
+import {
+  startHarnessRun,
+  pickVariant,
+  cleanupHarness,
+  showHarnessStatus,
+  getHarnessRun,
+  saveHarnessReport,
+} from "../lib/guardian/harness";
+import {
+  runPlaywrightTests,
+  registerTaskTests,
+  checkTaskCanComplete,
+  formatValidationStatus,
+  startFixLoop,
+  endFixLoop,
+  getFixLoopContext,
+  updateValidationFromTestRun,
+} from "../lib/guardian/playwright-validation";
+import {
+  narrateTaskStart,
+  narrateTaskComplete,
+  incrementLoop,
+  getCurrentLoop,
+  clearActivityLog,
+} from "../lib/guardian/activity-narrator";
 
 const ROOT_DIR = resolve(import.meta.dir, "../..");
 const CONFIG_PATH = join(ROOT_DIR, "ccplate.config.json");
@@ -236,7 +266,6 @@ function listWorktrees(): void {
 
 function cleanupWorktree(taskId: string, deleteBranch = true): void {
   validateTaskId(taskId);
-  const config = loadConfig();
   const state = loadWorkflowState();
 
   const worktree = state.active_worktrees.find((w) => w.id === taskId);
@@ -434,6 +463,83 @@ function schemaUnlock(): void {
   }
 }
 
+// ==================== INIT / PRD COMMANDS ====================
+
+async function runInit(options: { force?: boolean; goal?: string }): Promise<void> {
+  console.log("\n" + "═".repeat(60));
+  console.log("  🎯 CCPLATE Project Discovery");
+  console.log("═".repeat(60) + "\n");
+
+  const existingPRD = loadPRD(ROOT_DIR);
+  if (existingPRD && !options.force) {
+    console.log("⚠️  A frozen PRD already exists:");
+    console.log(`   Hash: ${existingPRD.metadata.hash}`);
+    console.log(`   Created: ${existingPRD.metadata.createdAt}`);
+    console.log(`   Project: ${existingPRD.answers.projectName}\n`);
+    console.log("Use --force to overwrite (old PRD will be archived).\n");
+    process.exit(1);
+  }
+
+  if (existingPRD && options.force) {
+    console.log("📦 Existing PRD will be archived before creating new one.\n");
+  }
+
+  const answers = await runInteractiveInterview();
+
+  console.log("\n" + "─".repeat(60));
+  console.log("📋 Review your answers:\n");
+  console.log(`Project: ${answers.projectName}`);
+  console.log(`Tech Stack: ${answers.techStack.frontend} / ${answers.techStack.backend} / ${answers.techStack.database}`);
+  console.log(`Success Criteria: ${answers.successCriteria.length} items`);
+  console.log(`Critical Paths: ${answers.criticalPaths.length} flows`);
+  console.log("─".repeat(60) + "\n");
+
+  const result = savePRD(ROOT_DIR, answers, { force: options.force });
+
+  if (!result.success) {
+    console.error(`❌ ${result.message}`);
+    process.exit(1);
+  }
+
+  const prd = loadPRD(ROOT_DIR);
+  if (prd) {
+    updateWorkflowStateWithPRD(ROOT_DIR, prd.metadata);
+  }
+
+  console.log("✅ PRD created successfully!\n");
+  console.log(`   📄 Markdown: ${result.prdPath}`);
+  console.log(`   📊 JSON: ${result.jsonPath}`);
+  console.log(`   🔒 Hash: ${prd?.metadata.hash}\n`);
+  console.log("This PRD is now the 'Success Contract' for autonomous agent work.");
+  console.log("Agents will use success criteria and critical paths to validate their work.\n");
+}
+
+function showPRDStatus(): void {
+  const prd = loadPRD(ROOT_DIR);
+  
+  if (!prd) {
+    console.log("No PRD found. Run 'ccplate init' to create one.");
+    return;
+  }
+
+  console.log("\n📋 PRD Status\n");
+  console.log(`Project: ${prd.answers.projectName}`);
+  console.log(`Hash: ${prd.metadata.hash}`);
+  console.log(`Created: ${prd.metadata.createdAt}`);
+  console.log(`Frozen: ${prd.metadata.frozen ? "Yes" : "No"}`);
+  console.log(`\nTech Stack:`);
+  console.log(`  Frontend: ${prd.answers.techStack.frontend}`);
+  console.log(`  Backend: ${prd.answers.techStack.backend}`);
+  console.log(`  Database: ${prd.answers.techStack.database}`);
+  console.log(`  Auth: ${prd.answers.techStack.auth}`);
+  console.log(`  Hosting: ${prd.answers.techStack.hosting}`);
+  console.log(`\nSuccess Criteria (${prd.answers.successCriteria.length}):`);
+  prd.answers.successCriteria.forEach((c, i) => console.log(`  ${i + 1}. ${c}`));
+  console.log(`\nCritical Paths (${prd.answers.criticalPaths.length}):`);
+  prd.answers.criticalPaths.forEach((p) => console.log(`  - ${p}`));
+  console.log();
+}
+
 function schemaStatus(): void {
   const lock = getSchemaLockStatus();
   
@@ -490,6 +596,10 @@ function printHelp(): void {
 ccplate - CCPLATE Guardian CLI
 
 Usage:
+  ccplate init [--force]              Run discovery interview and create PRD
+  ccplate init status                 Show current PRD status
+  ccplate init-poc [--force]          Alias for 'ccplate init'
+
   ccplate worktree create <task-id>   Create isolated worktree for a task
   ccplate worktree list               List active worktrees
   ccplate worktree validate <task-id> Run preflight checks on worktree
@@ -522,7 +632,30 @@ Usage:
   ccplate hitl approve <id> [--by <name>] [--notes <text>]  Approve a request
   ccplate hitl reject <id> [--by <name>] [--notes <text>]   Reject a request
 
+  ccplate harness --variants <N> --goal "<desc>"  Start POC harness with N variants
+  ccplate harness status [run-id]                 Show harness run status
+  ccplate harness pick <variant-id>               Select variant to merge
+  ccplate harness cleanup [run-id]                Remove non-selected worktrees
+  ccplate harness report [run-id]                 Regenerate report
+
+  ccplate validate status                         Show Playwright validation status
+  ccplate validate run [test-pattern]             Run Playwright tests
+  ccplate validate register <task-id> <patterns>  Register tests required for task
+  ccplate validate check <task-id>                Check if task can be completed
+  ccplate validate fixloop status                 Show fix loop status
+  ccplate validate fixloop end                    End active fix loop
+
+  ccplate activity status                         Show current loop number
+  ccplate activity start <task>                   Log task start
+  ccplate activity complete <task>                Log task completion
+  ccplate activity clear                          Clear activity log
+  ccplate activity loop                           Increment loop counter
+
 Examples:
+  ccplate init
+  ccplate init --force
+  ccplate init status
+
   ccplate worktree create oauth-api
   ccplate worktree list
   ccplate worktree validate oauth-api
@@ -541,6 +674,12 @@ Examples:
   ccplate hook generate "fetch user data"
   ccplate component generate "modal dialog with close button"
   ccplate api generate "create user endpoint"
+
+  ccplate harness --variants 3 --goal "Auth implementation"
+  ccplate harness --names clerk,nextauth,custom --goal "Auth strategy"
+  ccplate harness status
+  ccplate harness pick variant-1
+  ccplate harness cleanup
 
 Options:
   --help, -h    Show this help message
@@ -566,7 +705,14 @@ function parseLimit(args: string[]): number {
 }
 
 async function main(): Promise<void> {
-  if (command === "worktree") {
+  if (command === "init" || command === "init-poc") {
+    const force = args.includes("--force");
+    if (subcommand === "status") {
+      showPRDStatus();
+    } else {
+      await runInit({ force });
+    }
+  } else if (command === "worktree") {
     switch (subcommand) {
       case "create":
         if (!taskId) {
@@ -608,19 +754,22 @@ async function main(): Promise<void> {
     if (subcommand === "generate" && taskId) {
       await generateHook(args.slice(2).join(" "));
     } else {
-      console.log("Usage: ccplate hook generate <description>");
+      console.error("Usage: ccplate hook generate <description>");
+      process.exit(1);
     }
   } else if (command === "component") {
     if (subcommand === "generate" && taskId) {
       await generateComponent(args.slice(2).join(" "));
     } else {
-      console.log("Usage: ccplate component generate <description>");
+      console.error("Usage: ccplate component generate <description>");
+      process.exit(1);
     }
   } else if (command === "api") {
     if (subcommand === "generate" && taskId) {
       await generateApi(args.slice(2).join(" "));
     } else {
-      console.log("Usage: ccplate api generate <description>");
+      console.error("Usage: ccplate api generate <description>");
+      process.exit(1);
     }
   } else if (command === "schema") {
     switch (subcommand) {
@@ -730,7 +879,14 @@ async function main(): Promise<void> {
           console.error("  Priority: low, medium, high, critical (default: medium)");
           process.exit(1);
         }
-        const priority = priorityIndex !== -1 ? args[priorityIndex + 1] as 'low' | 'medium' | 'high' | 'critical' : 'medium';
+        const validPriorities = ['low', 'medium', 'high', 'critical'] as const;
+        const priorityArg = priorityIndex !== -1 ? args[priorityIndex + 1] : 'medium';
+        if (!validPriorities.includes(priorityArg as typeof validPriorities[number])) {
+          console.error(`Error: Invalid priority '${priorityArg}'`);
+          console.error(`Valid priorities: ${validPriorities.join(', ')}`);
+          process.exit(1);
+        }
+        const priority = priorityArg as 'low' | 'medium' | 'high' | 'critical';
         const worktreeId = process.env.CCPLATE_WORKTREE || 'main';
         const agentName = process.env.CCPLATE_AGENT || 'cli';
         
@@ -855,6 +1011,256 @@ async function main(): Promise<void> {
       }
       default:
         console.error(`Unknown hitl command: ${subcommand}`);
+        printHelp();
+        process.exit(1);
+    }
+  } else if (command === "harness") {
+    // Parse harness-specific args
+    const variantsIndex = args.indexOf('--variants');
+    const namesIndex = args.indexOf('--names');
+    const goalIndex = args.indexOf('--goal');
+    const maxMinutesIndex = args.indexOf('--max-minutes');
+    const noPrdIndex = args.indexOf('--no-prd');
+    const dryRunIndex = args.indexOf('--dry-run');
+
+    switch (subcommand) {
+      case "status": {
+        showHarnessStatus(ROOT_DIR, taskId);
+        break;
+      }
+      case "pick": {
+        if (!taskId) {
+          console.error("Error: Missing variant ID\nUsage: ccplate harness pick <variant-id>");
+          process.exit(1);
+        }
+        await pickVariant(ROOT_DIR, taskId);
+        break;
+      }
+      case "cleanup": {
+        await cleanupHarness(ROOT_DIR, taskId);
+        break;
+      }
+      case "report": {
+        const run = getHarnessRun(ROOT_DIR, taskId);
+        if (!run) {
+          console.error("No harness run found");
+          process.exit(1);
+        }
+        const reportPath = saveHarnessReport(ROOT_DIR, run);
+        console.log(`Report saved: ${reportPath}`);
+        break;
+      }
+      default: {
+        // Start new harness run
+        if (variantsIndex === -1 && namesIndex === -1) {
+          // No variants specified, show status
+          showHarnessStatus(ROOT_DIR);
+          break;
+        }
+
+        const variantCount = variantsIndex !== -1 
+          ? parseInt(args[variantsIndex + 1], 10) 
+          : 0;
+        const names = namesIndex !== -1 
+          ? args[namesIndex + 1]?.split(',').map(n => n.trim()).filter(Boolean)
+          : undefined;
+        
+        if (!names && (isNaN(variantCount) || variantCount < 1)) {
+          console.error("Error: --variants must be a positive number, or use --names");
+          process.exit(1);
+        }
+
+        if (goalIndex === -1) {
+          console.error("Error: --goal is required");
+          console.error("Usage: ccplate harness --variants <N> --goal \"<description>\"");
+          process.exit(1);
+        }
+
+        const goal = args[goalIndex + 1];
+        if (!goal) {
+          console.error("Error: --goal value is required");
+          process.exit(1);
+        }
+
+        const maxMinutes = maxMinutesIndex !== -1 
+          ? parseInt(args[maxMinutesIndex + 1], 10) 
+          : 30;
+
+        await startHarnessRun({
+          rootDir: ROOT_DIR,
+          goal,
+          variants: names ? names.length : variantCount,
+          names,
+          maxMinutes,
+          requirePRD: noPrdIndex === -1,
+          dryRun: dryRunIndex !== -1,
+        });
+        break;
+      }
+    }
+  } else if (command === "validate") {
+    switch (subcommand) {
+      case "status": {
+        console.log(formatValidationStatus(ROOT_DIR));
+        break;
+      }
+      case "run": {
+        console.log("🧪 Running Playwright tests...\n");
+        const result = runPlaywrightTests(ROOT_DIR, {
+          testPattern: taskId,
+        });
+        
+        // Save validation state with test results
+        const { shouldStartFixLoop, failedTest } = updateValidationFromTestRun(ROOT_DIR, result);
+        
+        console.log(`\nResults:`);
+        console.log(`  Passed: ${result.passed}`);
+        console.log(`  Failed: ${result.failed}`);
+        console.log(`  Total: ${result.totalTests}`);
+        
+        if (result.failed > 0) {
+          console.log(`\n❌ ${result.failed} test(s) failed`);
+          
+          // Show failing test details
+          const failures = result.tests.filter(t => t.status === "failed");
+          if (failures.length > 0) {
+            console.log("\nFailing tests:");
+            for (const f of failures.slice(0, 5)) {
+              console.log(`  - ${f.testFile}: ${f.testName}`);
+              if (f.error) console.log(`    Error: ${f.error.slice(0, 100)}`);
+              if (f.screenshotPath) console.log(`    Screenshot: ${f.screenshotPath}`);
+            }
+          }
+          
+          // Auto-start fix loop if needed
+          if (shouldStartFixLoop && failedTest) {
+            startFixLoop(ROOT_DIR, failedTest);
+            console.log(`\n🔄 Fix loop started for: ${failedTest.testFile} › ${failedTest.testName}`);
+          }
+          
+          process.exit(1);
+        } else {
+          console.log(`\n✅ All tests passed`);
+        }
+        break;
+      }
+      case "register": {
+        if (!taskId) {
+          console.error("Error: Missing task ID\nUsage: ccplate validate register <task-id> <pattern1,pattern2,...>");
+          process.exit(1);
+        }
+        const patterns = args.slice(3).join(' ').split(',').map(p => p.trim()).filter(Boolean);
+        if (patterns.length === 0) {
+          console.error("Error: At least one test pattern is required");
+          process.exit(1);
+        }
+        registerTaskTests(ROOT_DIR, taskId, patterns);
+        console.log(`✓ Registered ${patterns.length} test pattern(s) for task '${taskId}'`);
+        console.log(`  Patterns: ${patterns.join(', ')}`);
+        break;
+      }
+      case "check": {
+        if (!taskId) {
+          console.error("Error: Missing task ID\nUsage: ccplate validate check <task-id>");
+          process.exit(1);
+        }
+        const result = checkTaskCanComplete(ROOT_DIR, taskId);
+        if (result.canComplete) {
+          console.log(`✅ Task '${taskId}' can be marked complete`);
+        } else {
+          console.log(`⛔ Task '${taskId}' cannot be completed`);
+          console.log(`   Reason: ${result.reason}`);
+          if (result.failingTests && result.failingTests.length > 0) {
+            console.log(`\n   Failing tests:`);
+            for (const test of result.failingTests.slice(0, 5)) {
+              console.log(`     - ${test}`);
+            }
+            if (result.failingTests.length > 5) {
+              console.log(`     ... and ${result.failingTests.length - 5} more`);
+            }
+          }
+          process.exit(1);
+        }
+        break;
+      }
+      case "fixloop": {
+        const fixSubCmd = taskId;
+        if (fixSubCmd === "status") {
+          const context = getFixLoopContext(ROOT_DIR);
+          if (context) {
+            console.log(context);
+          } else {
+            console.log("No fix loop active");
+          }
+        } else if (fixSubCmd === "end") {
+          endFixLoop(ROOT_DIR);
+          console.log("✓ Fix loop ended");
+        } else {
+          console.error("Usage: ccplate validate fixloop [status|end]");
+          process.exit(1);
+        }
+        break;
+      }
+      default:
+        console.error(`Unknown validate command: ${subcommand}`);
+        printHelp();
+        process.exit(1);
+    }
+  } else if (command === "activity") {
+    switch (subcommand) {
+      case "status": {
+        const loop = getCurrentLoop(ROOT_DIR);
+        console.log(`Current loop: ${loop}`);
+        break;
+      }
+      case "start": {
+        const taskDesc = args.slice(2).join(' ');
+        if (!taskDesc) {
+          console.error("Error: Task description required\nUsage: ccplate activity start <task description>");
+          process.exit(1);
+        }
+        narrateTaskStart(ROOT_DIR, taskDesc);
+        console.log(`✓ Logged task start: ${taskDesc}`);
+        break;
+      }
+      case "complete": {
+        const taskDesc = args.slice(2).join(' ').split('--')[0].trim();
+        const remainingIdx = args.indexOf('--remaining');
+        const totalIdx = args.indexOf('--total');
+        
+        if (!taskDesc) {
+          console.error("Error: Task description required\nUsage: ccplate activity complete <task> [--remaining N --total M]");
+          process.exit(1);
+        }
+        
+        const remaining = remainingIdx !== -1 ? parseInt(args[remainingIdx + 1], 10) : 0;
+        const total = totalIdx !== -1 ? parseInt(args[totalIdx + 1], 10) : 1;
+        
+        if (isNaN(remaining)) {
+          console.error("Error: --remaining must be a valid number");
+          process.exit(1);
+        }
+        if (isNaN(total)) {
+          console.error("Error: --total must be a valid number");
+          process.exit(1);
+        }
+        
+        narrateTaskComplete(ROOT_DIR, taskDesc, remaining, total);
+        console.log(`✓ Logged task complete: ${taskDesc}`);
+        break;
+      }
+      case "clear": {
+        clearActivityLog(ROOT_DIR);
+        console.log("✓ Activity log cleared");
+        break;
+      }
+      case "loop": {
+        const newLoop = incrementLoop(ROOT_DIR);
+        console.log(`✓ Loop incremented to ${newLoop}`);
+        break;
+      }
+      default:
+        console.error(`Unknown activity command: ${subcommand}`);
         printHelp();
         process.exit(1);
     }

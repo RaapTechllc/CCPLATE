@@ -14,9 +14,8 @@
  *   full-session   - Run complete development session
  */
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
-import { execSync } from "child_process";
 
 const PROJECT_DIR = process.cwd();
 const MEMORY_DIR = join(PROJECT_DIR, "memory");
@@ -58,16 +57,7 @@ function ensureMemoryDir(): void {
   }
 }
 
-function loadJSON<T>(path: string, defaultValue: T): T {
-  try {
-    if (existsSync(path)) {
-      return JSON.parse(readFileSync(path, "utf-8"));
-    }
-  } catch {
-    // Return default
-  }
-  return defaultValue;
-}
+
 
 function saveJSON(path: string, data: unknown): void {
   writeFileSync(path, JSON.stringify(data, null, 2));
@@ -206,7 +196,7 @@ function runFullSession(): void {
   
   // Phase 1: Fresh start
   console.log("Phase 1: Starting fresh session");
-  let state = getDefaultWorkflowState();
+  const state = getDefaultWorkflowState();
   saveJSON(join(MEMORY_DIR, "workflow-state.json"), state);
   saveJSON(join(MEMORY_DIR, "guardian-state.json"), getDefaultGuardianState());
   console.log("   ✅ Clean state initialized\n");

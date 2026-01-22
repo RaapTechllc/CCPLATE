@@ -15,6 +15,7 @@ import {
   type ComponentBuilderOutput,
   type ComponentSpec,
 } from "@/lib/component-builder";
+import { showToast } from "@/lib/toast";
 
 const DEFAULT_OPTIONS: ComponentOptions = {
   type: "client",
@@ -95,7 +96,7 @@ export default function ComponentBuilderPage() {
         throw new Error(data.error || "Failed to apply component");
       }
 
-      alert(`Component created at ${output.suggestedPath}`);
+      showToast.success(`Component created at ${output.suggestedPath}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to apply component");
     } finally {

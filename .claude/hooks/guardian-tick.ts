@@ -7,13 +7,18 @@
  * - test: New code without recent tests
  * - error: Errors detected in output
  * - context: Context pressure too high
+ * - playwright: Playwright test failures blocking task completion
+ * 
+ * Features:
+ * - Activity Narrator: Logs human-readable activity to memory/ACTIVITY.md
+ * - Playwright Validation Loop: Blocks task completion until tests pass
  * 
  * Exit codes:
  * - 0: Success (nudge may or may not be emitted)
  */
 
 import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync } from "fs";
-import { join } from "path";
+import { join, basename } from "path";
 
 function ensureDir(dir: string): void {
   try {
@@ -45,6 +50,15 @@ interface WorkflowState {
   pending_nudges: string[];
   errors_detected: string[];
   lsp_diagnostics_count: number;
+  playwright_last_run?: {
+    timestamp: string;
+    passed: number;
+    failed: number;
+    total: number;
+  };
+  playwright_blocked_tasks?: string[];
+  fix_loop_active?: boolean;
+  fix_loop_attempts?: number;
 }
 
 interface NudgeCooldown {
@@ -83,8 +97,10 @@ interface GuardianConfig {
       progress: { enabled: boolean };
       context: { enabled: boolean; threshold: number };
       error: { enabled: boolean };
+      playwright: { enabled: boolean };
     };
     cooldown: { minutes: number; toolUses: number };
+    narrator: { enabled: boolean };
   };
   lsp?: {
     enabled: boolean;
@@ -136,6 +152,9 @@ const NUDGES_LOG_PATH = join(MEMORY_DIR, "guardian-nudges.jsonl");
 const NUDGE_LAST_PATH = join(MEMORY_DIR, "guardian-last.txt");
 const CONFIG_PATH = join(PROJECT_DIR, "ccplate.config.json");
 const CONTEXT_LEDGER_PATH = join(MEMORY_DIR, "context-ledger.json");
+const ACTIVITY_LOG_PATH = join(MEMORY_DIR, "ACTIVITY.md");
+const NARRATOR_STATE_PATH = join(MEMORY_DIR, "narrator-state.json");
+const VALIDATION_STATE_PATH = join(MEMORY_DIR, "playwright-validation.json");
 
 function deepMerge<T extends object>(defaults: T, overrides: Partial<T>): T {
   const result = { ...defaults } as Record<string, unknown>;
@@ -198,6 +217,260 @@ function getDefaultGuardianState(): GuardianState {
 }
 
 const LSP_COOLDOWN_MS = 60_000; // 1 minute cooldown for LSP checks
+
+// ============================================================================
+// Activity Narrator
+// ============================================================================
+
+interface NarratorState {
+  currentLoop: number;
+  sessionId: string | null;
+  lastActivity: string | null;
+}
+
+interface ActivityEntry {
+  timestamp: string;
+  loop: number;
+  status: "start" | "progress" | "error" | "test_fail" | "test_pass" | "complete" | "hitl";
+  activity: string;
+  worktree?: string;
+  tasksRemaining?: number;
+  totalTasks?: number;
+}
+
+function loadNarratorState(): NarratorState {
+  return loadJSON<NarratorState>(NARRATOR_STATE_PATH, {
+    currentLoop: 1,
+    sessionId: null,
+    lastActivity: null,
+  });
+}
+
+function saveNarratorState(state: NarratorState): void {
+  saveJSON(NARRATOR_STATE_PATH, state);
+}
+
+function getStatusEmoji(status: ActivityEntry["status"]): string {
+  switch (status) {
+    case "start": return "🚀";
+    case "progress": return "⏳";
+    case "error": return "⚠️";
+    case "test_fail": return "❌";
+    case "test_pass": return "✅";
+    case "complete": return "✅";
+    case "hitl": return "🚧";
+    default: return "📝";
+  }
+}
+
+function formatActivityLine(entry: ActivityEntry): string {
+  const time = new Date(entry.timestamp).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  
+  const emoji = getStatusEmoji(entry.status);
+  const worktreeTag = entry.worktree ? ` \`${entry.worktree}\` |` : "";
+  
+  let taskInfo = "";
+  if (entry.tasksRemaining !== undefined && entry.totalTasks !== undefined) {
+    taskInfo = ` (${entry.totalTasks - entry.tasksRemaining}/${entry.totalTasks} tasks)`;
+  }
+  
+  return `| ${time} | Loop ${entry.loop} | ${emoji} |${worktreeTag} ${entry.activity}${taskInfo} |`;
+}
+
+function ensureActivityLogExists(): void {
+  if (!existsSync(ACTIVITY_LOG_PATH)) {
+    const header = `# Activity Log
+
+> Human-readable log of Guardian activity. Scan this to catch up quickly.
+
+| Time | Loop | Status | Activity |
+|------|------|--------|----------|
+`;
+    writeFileSync(ACTIVITY_LOG_PATH, header);
+  }
+}
+
+function appendActivityEntry(entry: ActivityEntry): void {
+  ensureActivityLogExists();
+  const line = formatActivityLine(entry);
+  appendFileSync(ACTIVITY_LOG_PATH, line + "\n");
+}
+
+function narrateToolUse(
+  toolName: string,
+  toolInput: Record<string, unknown>,
+  toolOutput: string,
+  sessionId: string,
+  narratorState: NarratorState
+): { activity: string; status: ActivityEntry["status"] } | null {
+  // Detect new session
+  if (narratorState.sessionId !== sessionId) {
+    narratorState.currentLoop = 1;
+    narratorState.sessionId = sessionId;
+    narratorState.lastActivity = null;
+  }
+  
+  let activity = "";
+  let status: ActivityEntry["status"] = "progress";
+  
+  switch (toolName) {
+    case "Write":
+    case "create_file": {
+      const path = (toolInput.path as string) || "";
+      const fileName = basename(path);
+      activity = `**Writing file** - ${fileName}`;
+      break;
+    }
+    case "Edit":
+    case "edit_file": {
+      const path = (toolInput.path as string) || "";
+      const fileName = basename(path);
+      activity = `**Editing file** - ${fileName}`;
+      break;
+    }
+    case "Read":
+    case "Grep":
+    case "glob":
+    case "finder":
+      // Don't log search/read operations - too noisy
+      return null;
+    case "Bash": {
+      const command = (toolInput.command as string) || "";
+      
+      // Detect Playwright test runs
+      if (/playwright\s+test/.test(command)) {
+        // Check output for pass/fail
+        if (/\d+\s+passed/.test(toolOutput) && !/\d+\s+failed/.test(toolOutput)) {
+          activity = `**Tests passed** - Playwright`;
+          status = "test_pass";
+        } else if (/\d+\s+failed/.test(toolOutput)) {
+          const failMatch = toolOutput.match(/(\d+)\s+failed/);
+          const failCount = failMatch ? failMatch[1] : "?";
+          activity = `**Tests failed** - Playwright (${failCount} failed)`;
+          status = "test_fail";
+        } else {
+          activity = `**Running tests** - Playwright`;
+        }
+      } else if (/npm\s+(run\s+)?test|jest|vitest/.test(command)) {
+        activity = `**Running tests**`;
+      } else if (/git\s+commit/.test(command)) {
+        activity = `**Committing changes**`;
+      } else if (/git\s+push/.test(command)) {
+        activity = `**Pushing changes**`;
+      } else if (/npm\s+(run\s+)?build|next\s+build/.test(command)) {
+        activity = `**Building project**`;
+      } else if (/npm\s+install|pnpm\s+install|yarn\s+install/.test(command)) {
+        activity = `**Installing dependencies**`;
+      } else {
+        // Don't log generic bash commands
+        return null;
+      }
+      break;
+    }
+    default:
+      return null;
+  }
+  
+  // Avoid duplicate consecutive activities
+  if (narratorState.lastActivity === activity) {
+    return null;
+  }
+  
+  narratorState.lastActivity = activity;
+  return { activity, status };
+}
+
+// ============================================================================
+// Playwright Validation
+// ============================================================================
+
+interface PlaywrightTestResult {
+  passed: number;
+  failed: number;
+  total: number;
+  failedTests: Array<{ file: string; name: string; error?: string }>;
+}
+
+interface ValidationState {
+  lastRun?: {
+    timestamp: string;
+    passed: number;
+    failed: number;
+    total: number;
+  };
+  blockedTasks: string[];
+  fixLoopActive: boolean;
+  fixLoopAttempts: number;
+  fixLoopTarget?: {
+    testFile: string;
+    testName: string;
+    error: string;
+  };
+}
+
+function loadValidationState(): ValidationState {
+  return loadJSON<ValidationState>(VALIDATION_STATE_PATH, {
+    blockedTasks: [],
+    fixLoopActive: false,
+    fixLoopAttempts: 0,
+  });
+}
+
+function saveValidationState(state: ValidationState): void {
+  saveJSON(VALIDATION_STATE_PATH, state);
+}
+
+function parsePlaywrightOutput(output: string): PlaywrightTestResult | null {
+  // Parse standard Playwright output
+  // Look for summary: "  X passed" or "  X failed"
+  const passedMatch = output.match(/(\d+)\s+passed/);
+  const failedMatch = output.match(/(\d+)\s+failed/);
+  
+  if (!passedMatch && !failedMatch) {
+    return null;
+  }
+  
+  const passed = passedMatch ? parseInt(passedMatch[1], 10) : 0;
+  const failed = failedMatch ? parseInt(failedMatch[1], 10) : 0;
+  const total = passed + failed;
+  
+  // Parse failed test details
+  // Format: "  ✘  2 [chromium] › auth.spec.ts:17:3 › Auth › Login › should show error (5.2s)"
+  const failedTests: Array<{ file: string; name: string; error?: string }> = [];
+  const testLinePattern = /✘\s+\d+\s+\[.+?\]\s+›\s+(.+?):[\d:]+\s+›\s+(.+?)(?:\s+\(|$)/gm;
+  
+  let match;
+  while ((match = testLinePattern.exec(output)) !== null) {
+    failedTests.push({
+      file: match[1],
+      name: match[2].trim(),
+    });
+  }
+  
+  return { passed, failed, total, failedTests };
+}
+
+function detectPlaywrightRun(
+  toolName: string,
+  toolInput: Record<string, unknown>,
+  toolOutput: string
+): PlaywrightTestResult | null {
+  if (toolName !== "Bash") {
+    return null;
+  }
+  
+  const command = (toolInput.command as string) || "";
+  
+  if (!/playwright\s+test/.test(command)) {
+    return null;
+  }
+  
+  return parsePlaywrightOutput(toolOutput);
+}
 
 function loadContextLedger(): ContextLedger {
   return loadJSON<ContextLedger>(CONTEXT_LEDGER_PATH, {
@@ -302,8 +575,10 @@ function getDefaultConfig(): GuardianConfig {
         progress: { enabled: true },
         context: { enabled: true, threshold: 0.8 },
         error: { enabled: true },
+        playwright: { enabled: true },
       },
       cooldown: { minutes: 10, toolUses: 5 },
+      narrator: { enabled: true },
     },
   };
 }
@@ -524,6 +799,46 @@ function evaluateNudges(
     }
   }
 
+  // 5. Playwright validation nudge
+  if (
+    nudgeConfig.playwright.enabled &&
+    !isMuted("playwright") &&
+    !isOnCooldown(guardianState, "playwright", config)
+  ) {
+    // Check for failing Playwright tests
+    if (workflowState.playwright_last_run?.failed && workflowState.playwright_last_run.failed > 0) {
+      const { failed, total } = workflowState.playwright_last_run;
+      
+      // If fix loop is active, show attempt count
+      if (workflowState.fix_loop_active) {
+        const attempts = workflowState.fix_loop_attempts || 0;
+        if (attempts >= 3) {
+          return {
+            type: "playwright",
+            message: `🔄 Fix loop attempt ${attempts + 1}: ${failed}/${total} tests still failing. Consider checking test expectations or debugging locally.`,
+          };
+        }
+        return {
+          type: "playwright",
+          message: `🔄 Fix loop active: ${failed}/${total} Playwright tests failing. Fix the failing tests to continue.`,
+        };
+      }
+      
+      return {
+        type: "playwright",
+        message: `🧪 ${failed}/${total} Playwright tests failing. Task cannot be marked complete until tests pass.`,
+      };
+    }
+    
+    // Check for blocked tasks
+    if (workflowState.playwright_blocked_tasks && workflowState.playwright_blocked_tasks.length > 0) {
+      return {
+        type: "playwright",
+        message: `⛔ ${workflowState.playwright_blocked_tasks.length} task(s) blocked by failing Playwright tests. Run tests to verify fixes.`,
+      };
+    }
+  }
+
   return null;
 }
 
@@ -582,6 +897,10 @@ async function main(): Promise<void> {
     getDefaultGuardianState()
   );
 
+  // Load narrator and validation states
+  const narratorState = loadNarratorState();
+  const validationState = loadValidationState();
+
   // Increment tool use counter
   guardianState.total_tool_uses++;
 
@@ -594,6 +913,90 @@ async function main(): Promise<void> {
     contextLedger,
     guardianState.total_tool_uses
   );
+
+  // ========================================================================
+  // Activity Narrator - Log significant tool uses
+  // ========================================================================
+  if (config.guardian.narrator?.enabled !== false) {
+    const toolOutput = input.tool_output || "";
+    const narrateResult = narrateToolUse(
+      input.tool_name,
+      input.tool_input,
+      toolOutput,
+      input.session_id,
+      narratorState
+    );
+    
+    if (narrateResult) {
+      appendActivityEntry({
+        timestamp: new Date().toISOString(),
+        loop: narratorState.currentLoop,
+        status: narrateResult.status,
+        activity: narrateResult.activity,
+      });
+    }
+    
+    // Save narrator state (may have been updated)
+    saveNarratorState(narratorState);
+  }
+
+  // ========================================================================
+  // Playwright Validation - Detect test runs and update state
+  // ========================================================================
+  const playwrightResult = detectPlaywrightRun(
+    input.tool_name,
+    input.tool_input,
+    input.tool_output || ""
+  );
+  
+  if (playwrightResult) {
+    // Update workflow state with Playwright results
+    workflowState.playwright_last_run = {
+      timestamp: new Date().toISOString(),
+      passed: playwrightResult.passed,
+      failed: playwrightResult.failed,
+      total: playwrightResult.total,
+    };
+    
+    // Update validation state
+    validationState.lastRun = workflowState.playwright_last_run;
+    
+    if (playwrightResult.failed > 0) {
+      // Start or continue fix loop
+      if (!validationState.fixLoopActive) {
+        validationState.fixLoopActive = true;
+        validationState.fixLoopAttempts = 0;
+        
+        // Set first failed test as target
+        if (playwrightResult.failedTests.length > 0) {
+          const firstFailed = playwrightResult.failedTests[0];
+          validationState.fixLoopTarget = {
+            testFile: firstFailed.file,
+            testName: firstFailed.name,
+            error: firstFailed.error || "Test failed",
+          };
+        }
+      } else {
+        // Increment fix loop attempts
+        validationState.fixLoopAttempts++;
+      }
+      
+      workflowState.fix_loop_active = true;
+      workflowState.fix_loop_attempts = validationState.fixLoopAttempts;
+    } else {
+      // All tests passed - end fix loop
+      validationState.fixLoopActive = false;
+      validationState.fixLoopAttempts = 0;
+      validationState.fixLoopTarget = undefined;
+      validationState.blockedTasks = [];
+      
+      workflowState.fix_loop_active = false;
+      workflowState.fix_loop_attempts = 0;
+      workflowState.playwright_blocked_tasks = [];
+    }
+    
+    saveValidationState(validationState);
+  }
 
   // Run LSP diagnostics if enabled and appropriate
   let lspResult: LSPDiagnosticsResult | undefined;

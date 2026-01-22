@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { getDashboardStats, getUsers } from "@/lib/services/admin-service";
 import { StatsCard } from "@/components/admin/stats-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -137,10 +138,13 @@ export default async function AdminDashboardPage() {
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-sm font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
                         {user.image ? (
-                          <img
+                          <Image
                             src={user.image}
                             alt={user.name || "User"}
+                            width={40}
+                            height={40}
                             className="h-10 w-10 rounded-full object-cover"
+                            unoptimized
                           />
                         ) : (
                           user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()

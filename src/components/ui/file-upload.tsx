@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { useCallback, useState, useRef } from "react"
+import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { Button } from "./button"
 import { Spinner } from "./spinner"
@@ -267,10 +268,13 @@ export function FileUpload({
               className="flex items-center gap-3 rounded-md border bg-card p-3"
             >
               {item.preview ? (
-                <img
+                <Image
                   src={item.preview}
                   alt={item.file.name}
+                  width={48}
+                  height={48}
                   className="h-12 w-12 rounded object-cover"
+                  unoptimized
                 />
               ) : (
                 <FileIcon className="h-12 w-12 text-muted-foreground" />

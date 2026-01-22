@@ -57,6 +57,7 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId])
   @@map("accounts")
 }
 
@@ -68,6 +69,7 @@ model Session {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("sessions")
 }
 
@@ -128,6 +130,7 @@ model File {
 
   @@index([userId])
   @@index([mimeType])
+  @@index([deletedAt])
   @@map("files")
 }
 
