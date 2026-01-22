@@ -290,6 +290,32 @@ async function lspDiagnostics(filePath?: string): Promise<void> {
   }
 }
 
+// ==================== BUILDER COMMANDS ====================
+
+async function generateHook(description: string): Promise<void> {
+  console.log(`🪝 Generating hook: ${description}`);
+  console.log("⚠️  Hook generation requires the dev server running.");
+  console.log("   Run: curl -X POST http://localhost:3000/api/hook-builder/generate \\");
+  console.log(`        -H 'Content-Type: application/json' \\`);
+  console.log(`        -d '{"description": "${description}"}'`);
+}
+
+async function generateComponent(description: string): Promise<void> {
+  console.log(`🧩 Generating component: ${description}`);
+  console.log("⚠️  Component generation requires the dev server running.");
+  console.log("   Run: curl -X POST http://localhost:3000/api/component-builder/generate \\");
+  console.log(`        -H 'Content-Type: application/json' \\`);
+  console.log(`        -d '{"description": "${description}"}'`);
+}
+
+async function generateApi(description: string): Promise<void> {
+  console.log(`🔌 Generating API: ${description}`);
+  console.log("⚠️  API generation requires the dev server running.");
+  console.log("   Run: curl -X POST http://localhost:3000/api/api-builder/generate \\");
+  console.log(`        -H 'Content-Type: application/json' \\`);
+  console.log(`        -d '{"description": "${description}"}'`);
+}
+
 async function lspSymbols(path: string): Promise<void> {
   if (!path) {
     console.error("Error: Missing path");
@@ -336,6 +362,10 @@ Usage:
   ccplate lsp diagnostics [file]                  Get errors/warnings
   ccplate lsp symbols <path>                      Get symbols in file/directory
 
+  ccplate hook generate <description>             Generate a React hook
+  ccplate component generate <description>        Generate a React component
+  ccplate api generate <description>              Generate an API route
+
 Examples:
   ccplate worktree create oauth-api
   ccplate worktree list
@@ -346,6 +376,10 @@ Examples:
   ccplate lsp diagnostics
   ccplate lsp diagnostics src/lib/auth.ts
   ccplate lsp symbols src/lib/
+
+  ccplate hook generate "fetch user data"
+  ccplate component generate "modal dialog with close button"
+  ccplate api generate "create user endpoint"
 
 Options:
   --help, -h    Show this help message
@@ -394,6 +428,24 @@ async function main(): Promise<void> {
         console.error(`Unknown worktree command: ${subcommand}`);
         printHelp();
         process.exit(1);
+    }
+  } else if (command === "hook") {
+    if (subcommand === "generate" && taskId) {
+      await generateHook(args.slice(2).join(" "));
+    } else {
+      console.log("Usage: ccplate hook generate <description>");
+    }
+  } else if (command === "component") {
+    if (subcommand === "generate" && taskId) {
+      await generateComponent(args.slice(2).join(" "));
+    } else {
+      console.log("Usage: ccplate component generate <description>");
+    }
+  } else if (command === "api") {
+    if (subcommand === "generate" && taskId) {
+      await generateApi(args.slice(2).join(" "));
+    } else {
+      console.log("Usage: ccplate api generate <description>");
     }
   } else if (command === "lsp") {
     switch (subcommand) {

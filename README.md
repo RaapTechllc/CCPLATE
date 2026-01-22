@@ -37,9 +37,10 @@ npm install
 
 2. Set up environment:
 ```bash
-cp .env.example .env
-# Edit .env with your values
+cp .env.example .env.local
+# Edit .env.local with your values
 ```
+See [docs/ENV-SETUP.md](docs/ENV-SETUP.md) for detailed configuration instructions.
 
 3. Set up database:
 ```bash
