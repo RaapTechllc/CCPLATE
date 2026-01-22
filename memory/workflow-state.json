@@ -41,5 +41,7 @@
   "lsp_diagnostics_count": 0,
   "untested_additions": [
     "src/new-feature.ts"
-  ]
+  ],
+  "artifact_chain": [],
+  "associated_entities": []
 }

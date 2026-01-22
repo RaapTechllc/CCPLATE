@@ -4,6 +4,8 @@ import { execSync } from "child_process";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, resolve } from "path";
 import { LSPClient, createLSPClient } from "../lsp/sidecar";
+import { getAllJobs, getJob } from "../lib/guardian/job-queue";
+import { processQueue } from "../lib/guardian/job-executor";
 
 const ROOT_DIR = resolve(import.meta.dir, "../..");
 const CONFIG_PATH = join(ROOT_DIR, "ccplate.config.json");
@@ -366,6 +368,10 @@ Usage:
   ccplate component generate <description>        Generate a React component
   ccplate api generate <description>              Generate an API route
 
+  ccplate jobs list                               List all Guardian jobs
+  ccplate jobs get <job-id>                       Get details of a specific job
+  ccplate jobs process                            Process pending jobs
+
 Examples:
   ccplate worktree create oauth-api
   ccplate worktree list
@@ -475,6 +481,47 @@ async function main(): Promise<void> {
         break;
       default:
         console.error(`Unknown lsp command: ${subcommand}`);
+        printHelp();
+        process.exit(1);
+    }
+  } else if (command === "jobs") {
+    switch (subcommand) {
+      case "list": {
+        const jobs = getAllJobs();
+        if (jobs.length === 0) {
+          console.log("No jobs found");
+        } else {
+          console.log("Guardian Jobs:\n");
+          for (const job of jobs) {
+            const status = job.status.toUpperCase().padEnd(10);
+            const source = job.source.type === 'github_issue' 
+              ? `issue #${job.source.issueNumber}` 
+              : job.source.type === 'github_pr' 
+                ? `PR #${job.source.prNumber}` 
+                : 'cli';
+            console.log(`${job.id.padEnd(30)} ${status} ${job.command.padEnd(12)} ${source}`);
+          }
+        }
+        break;
+      }
+      case "get": {
+        if (!taskId) {
+          console.error("Error: Missing job-id\nUsage: ccplate jobs get <job-id>");
+          process.exit(1);
+        }
+        const job = getJob(taskId);
+        if (!job) {
+          console.error(`Job not found: ${taskId}`);
+          process.exit(1);
+        }
+        console.log(JSON.stringify(job, null, 2));
+        break;
+      }
+      case "process":
+        await processQueue();
+        break;
+      default:
+        console.error(`Unknown jobs command: ${subcommand}`);
         printHelp();
         process.exit(1);
     }

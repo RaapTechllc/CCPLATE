@@ -4,7 +4,7 @@ import { readFile, writeFile } from "fs/promises";
 import { exec } from "child_process";
 import { promisify } from "util";
 import path from "path";
-import type { Worktree, WorkflowState, WorktreeStatus } from "@/types/worktree";
+import type { Worktree, WorkflowState, WorktreeStatus, ActiveWorktree } from "@/types/worktree";
 
 const execAsync = promisify(exec);
 const WORKFLOW_STATE_PATH = path.join(process.cwd(), "memory/workflow-state.json");
@@ -27,16 +27,16 @@ async function checkWorktreeExists(worktreePath: string): Promise<boolean> {
   }
 }
 
-function determineWorktreeStatus(worktree: Worktree, exists: boolean): WorktreeStatus {
+function determineWorktreeStatus(worktree: { createdAt: string }, exists: boolean): WorktreeStatus {
   if (!exists) return "missing";
   
-  const createdAt = new Date(worktree.created_at);
+  const createdAt = new Date(worktree.createdAt);
   const now = new Date();
   const hoursSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
   
   if (hoursSinceCreation > 72) return "stale";
   
-  return worktree.status === "completed" ? "completed" : "active";
+  return "active";
 }
 
 export async function getWorktrees(): Promise<Worktree[]> {
@@ -45,10 +45,14 @@ export async function getWorktrees(): Promise<Worktree[]> {
     const worktrees = state.active_worktrees || [];
     
     const enrichedWorktrees = await Promise.all(
-      worktrees.map(async (wt) => {
+      worktrees.map(async (wt): Promise<Worktree> => {
         const exists = await checkWorktreeExists(wt.path);
         return {
-          ...wt,
+          task_id: wt.id,
+          branch: wt.branch,
+          path: wt.path,
+          agent: wt.agent,
+          created_at: wt.createdAt,
           status: determineWorktreeStatus(wt, exists),
         };
       })
@@ -76,17 +80,27 @@ export async function createWorktree(
     await execAsync(`git worktree add -b ${branch} "${worktreePath}" HEAD`);
 
     const state = await readWorkflowState();
+    const createdAt = new Date().toISOString();
+    
+    const activeWorktree = {
+      id: taskId,
+      path: worktreePath,
+      branch,
+      agent,
+      createdAt,
+    };
+
+    state.active_worktrees = [...(state.active_worktrees || []), activeWorktree];
+    await writeWorkflowState(state);
+
     const newWorktree: Worktree = {
       task_id: taskId,
       branch,
       path: worktreePath,
       agent,
-      created_at: new Date().toISOString(),
+      created_at: createdAt,
       status: "active",
     };
-
-    state.active_worktrees = [...(state.active_worktrees || []), newWorktree];
-    await writeWorkflowState(state);
 
     return { success: true, worktree: newWorktree };
   } catch (error) {
@@ -100,7 +114,7 @@ export async function cleanupWorktree(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const state = await readWorkflowState();
-    const worktree = state.active_worktrees?.find((wt) => wt.task_id === taskId);
+    const worktree = state.active_worktrees?.find((wt) => wt.id === taskId);
 
     if (!worktree) {
       return { success: false, error: "Worktree not found" };
@@ -119,7 +133,7 @@ export async function cleanupWorktree(
     }
 
     state.active_worktrees = state.active_worktrees.filter(
-      (wt) => wt.task_id !== taskId
+      (wt) => wt.id !== taskId
     );
     await writeWorkflowState(state);
 
