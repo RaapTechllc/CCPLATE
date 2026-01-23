@@ -13,6 +13,10 @@ import {
   FileServiceError,
 } from "@/lib/services/file-service";
 import { ALLOWED_FILE_TYPES, MAX_FILE_SIZE } from "@/types/file";
+import { rateLimit } from "@/lib/rate-limit";
+
+// Rate limit for uploads: 20 uploads per minute per user
+const uploadRateLimit = { interval: 60000, maxRequests: 20 };
 
 /**
  * POST /api/uploads
@@ -29,6 +33,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Unauthorized", code: "UNAUTHORIZED" },
         { status: 401 }
+      );
+    }
+
+    // Rate limit uploads per user
+    const rateLimitResult = rateLimit(`upload:${session.user.id}`, uploadRateLimit);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { error: "Upload rate limit exceeded. Please try again later.", code: "RATE_LIMITED" },
+        { 
+          status: 429,
+          headers: {
+            "Retry-After": String(Math.ceil((rateLimitResult.reset - Date.now()) / 1000)),
+          }
+        }
       );
     }
 

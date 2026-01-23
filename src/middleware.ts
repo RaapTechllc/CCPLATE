@@ -5,6 +5,14 @@ import type { NextRequest } from "next/server"
 // Routes that require authentication
 const protectedRoutes = [
   "/dashboard",
+  "/files",
+  "/prompt-builder",
+  "/schema-builder",
+  "/agent-builder",
+  "/api-builder",
+  "/component-builder",
+  "/hook-builder",
+  "/guardian",
   "/profile",
   "/settings",
 ]
@@ -129,6 +137,14 @@ export const config = {
   matcher: [
     // Protected page routes
     "/dashboard/:path*",
+    "/files/:path*",
+    "/prompt-builder/:path*",
+    "/schema-builder/:path*",
+    "/agent-builder/:path*",
+    "/api-builder/:path*",
+    "/component-builder/:path*",
+    "/hook-builder/:path*",
+    "/guardian/:path*",
     "/profile/:path*",
     "/settings/:path*",
     // Admin routes

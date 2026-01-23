@@ -5,12 +5,17 @@ import { successResponse, errorResponse } from "@/lib/api/response";
 import { ApiError } from "@/lib/api/errors";
 import { hashPassword } from "@/lib/auth-utils";
 import { emailSchema, passwordSchema } from "@/lib/validations/common";
+import { rateLimit, authRateLimit } from "@/lib/rate-limit";
 
 // Registration schema
 const registerSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
+  confirmPassword: z.string(),
   name: z.string().min(1, "Name is required").max(100, "Name too long").trim(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"],
 });
 
 /**
@@ -49,6 +54,12 @@ function handleError(error: unknown) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "anonymous";
+    const rateLimitResult = rateLimit(`auth-register:${ip}`, authRateLimit);
+    if (!rateLimitResult.success) {
+      return errorResponse("RATE_LIMITED", "Rate limit exceeded", 429);
+    }
+
     // Parse and validate request body
     const body = await request.json();
     const { email, password, name } = registerSchema.parse(body);

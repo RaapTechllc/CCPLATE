@@ -4,6 +4,18 @@
 
 ## Current Sprint
 
+### 🎯 Priority 0: CLI Quick Wins ✅ (2026-01-22)
+
+- [x] `ccplate status` - Unified dashboard (worktrees, jobs, HITL, schema lock, validation)
+- [x] `ccplate worktree open <id>` - Launch editor at worktree path
+- [x] `--note "description"` flag on `worktree create`
+- [x] Fuzzy matching for worktree ID resolution (prefix > substring)
+- [x] `ccplate worktree cleanup-orphans` - Bulk cleanup stale worktrees
+- [x] Merge rollback mechanism (`ccplate merge list/rollback`) with `memory/merge-ledger.jsonl`
+- [x] Audit logging (`ccplate audit list/categories`) with `memory/audit-log.jsonl`
+- [x] Rate limit login endpoint (NextAuth POST handler)
+- [x] Rate limit uploads endpoint (20/min per user)
+
 ### 🚀 Priority 1: Phase 6.2 - Advanced Guardian Features ✅
 
 #### Schema Lock System ✅
@@ -29,12 +41,12 @@
 
 ### 🚨 Priority 2: Security Fixes ✅
 
-- [ ] **Add rate limiting to AI endpoints** [Medium Risk] (Deferred - needs Redis/in-memory store design)
-  - [ ] `src/app/api/api-builder/generate/route.ts`
-  - [ ] `src/app/api/agents/[id]/run/route.ts`
-  - [ ] `src/app/api/component-builder/generate/route.ts`
-  - [ ] `src/app/api/schema-builder/generate/route.ts`
-  - [ ] `src/app/api/prompts/[id]/test/route.ts`
+- [x] **Add rate limiting to AI endpoints** [Medium Risk] (2026-01-22)
+  - [x] `src/app/api/api-builder/generate/route.ts`
+  - [x] `src/app/api/agents/[id]/run/route.ts`
+  - [x] `src/app/api/component-builder/generate/route.ts`
+  - [x] `src/app/api/schema-builder/generate/route.ts`
+  - [x] `src/app/api/prompts/[id]/test/route.ts`
 
 - [x] **Fix path-guard regex bypass** [Medium Risk] (2026-01-22)
   - [x] Anchor regex patterns with `^...$` in `matchesPattern()`
@@ -71,32 +83,50 @@
   - [ ] Compare current file changes to PRP steps
   - [ ] UI toggle already exists
 
-- [ ] **Add file upload magic byte validation**
-  - [ ] Install `file-type` package
-  - [ ] Verify actual content matches declared MIME type
-  - [ ] Block mismatches
+- [x] **Add file upload magic byte validation** ✅ (2026-01-22)
+  - [x] Install `file-type` package
+  - [x] Verify actual content matches declared MIME type in `src/lib/services/file-service.ts`
+  - [x] Block mismatches with MIME_TYPE_MISMATCH error
 
-- [ ] **Add audit logging for admin settings**
-  - [ ] Log who changed what in admin settings
-  - [ ] Store in `memory/audit-log.jsonl` or database
+- [x] **Add audit logging for admin settings** ✅ (2026-01-22)
+  - [x] Log who changed what in admin settings
+  - [x] Store in `memory/audit-log.jsonl` via `src/lib/guardian/audit-log.ts`
 
-- [ ] **Improve Guardian hook error handling**
-  - [ ] Log malformed input instead of silent exit
-  - [ ] Write to `memory/guardian-errors.log`
+- [x] **Async HITL queue with job resume** ✅ (2026-01-22)
+  - [x] Jobs can pause when awaiting HITL decision
+  - [x] Auto-resume on HITL approval
+  - [x] Added `pauseJob`, `resumeJob`, `getJobByHitlRequest` to job-queue.ts
+
+- [x] **Improve Guardian hook error handling** ✅ (2026-01-23)
+  - [x] Created `src/lib/guardian/error-log.ts` with standardized error logging
+  - [x] Updated GitHub webhook with try/catch and error logging
+  - [x] Updated `.claude/hooks/guardian-tick.ts` with `logHookError()` function
+  - [x] Updated `.claude/hooks/path-guard.ts` with error logging
+  - [x] Updated `.claude/hooks/pre-tool-use.ts` with error logging
+  - [x] All errors written to `memory/guardian-errors.log` in JSONL format
 
 ### 🧪 Priority 5: Testing & Validation
 
-- [ ] **Run Guardian test suite**
+- [x] **Run Guardian test suite** (2026-01-22)
+  - [x] Fixed calculateContextPressure crash on malformed ledger data
+  - [x] Fixed test simulation to use correct GuardianState structure
+  - [x] All 6 nudge verification tests pass
   ```bash
   npm run test:guardian:simulate full-session
   npm run test:guardian
   npm run test:guardian:worktrees
   ```
 
-- [ ] **Add E2E tests with Playwright**
-  - [ ] Auth flow tests
-  - [ ] Builder flow tests
-  - [ ] Guardian UI tests
+- [x] **Add E2E tests with Playwright** ✅ (2026-01-22)
+  - [x] Auth flow tests (`e2e/auth.spec.ts`)
+  - [x] Builder flow tests (`e2e/builders.spec.ts`)
+  - [x] Guardian UI tests (`e2e/guardian.spec.ts`)
+  - [x] Protected routes tests (`e2e/protected-routes.spec.ts`)
+  - [x] Auth fixtures for authenticated testing (`e2e/fixtures/auth.ts`)
+  - [x] JSON reporter wired into Playwright config for validation loop
+  - [x] Updated Playwright config to use production build (faster than dev)
+  - [ ] **Known issue:** Production server still slow (~6s per page) causing some timeouts
+  - [ ] 7/12 auth tests pass, 3 skipped (auth needed), 2 timeout on slow pages
 
 - [ ] **Configure API keys and test end-to-end**
   - [ ] Set up OpenAI/Anthropic keys
@@ -268,9 +298,10 @@
 |--------|-------|------|
 | Guardian Phases Complete | 7/7 (100%) | 2026-01-22 |
 | Phase 7 Features | PRD, Playwright Validation, Activity Narrator, POC Harness | 2026-01-22 |
-| Security Issues Fixed | path-guard regex, agent tool audit, API auth | 2026-01-22 |
-| Dependencies Updated | @types/react, hono (patch) | 2026-01-22 |
-| Tasks Completed | 65+ | 2026-01-22 |
+| Security Issues Fixed | path-guard regex, agent tool audit, API auth, file magic bytes | 2026-01-22 |
+| Dependencies Updated | @types/react, hono (patch), file-type@19 | 2026-01-22 |
+| E2E Tests Added | auth, builders, guardian, protected-routes | 2026-01-22 |
+| Tasks Completed | 70+ | 2026-01-22 |
 | Lint Warnings | 0 | 2026-01-22 |
 
 ---

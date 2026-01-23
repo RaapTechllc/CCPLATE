@@ -16,7 +16,15 @@ const generateRequestSchema = z.object({
   mode: z.enum(["description", "model"]),
   description: z.string().optional(),
   model: z.string().optional(),
-  basePath: z.string().optional(),
+  basePath: z.string().optional().refine(
+    (value) => {
+      if (!value) return true;
+      if (!value.startsWith("/api/")) return false;
+      if (value.includes("..") || value.includes("\\") || value.includes("//")) return false;
+      return /^\/api\/[a-z0-9\-/_]+$/.test(value);
+    },
+    { message: "basePath must start with /api/ and contain only lowercase letters, numbers, -, _, /" }
+  ),
   options: z.object({
     auth: z.enum(["none", "required", "admin"]).default("required"),
     pagination: z.boolean().default(true),
@@ -27,6 +35,10 @@ export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (session.user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
   }
 
   const rateLimitResult = rateLimit(`api-builder:${session.user.id}`, aiRateLimit);

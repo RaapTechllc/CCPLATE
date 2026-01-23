@@ -5,6 +5,7 @@ import GoogleProvider from "next-auth/providers/google";
 import GitHubProvider from "next-auth/providers/github";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
+import { env } from "@/lib/env";
 import type { Adapter } from "next-auth/adapters";
 // Type extensions are defined in @/types/auth.ts
 
@@ -68,21 +69,21 @@ export const authOptions: NextAuthOptions = {
     }),
 
     // Google Provider (optional - only if env vars are set)
-    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+    ...(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
       ? [
           GoogleProvider({
-            clientId: process.env.GOOGLE_CLIENT_ID,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+            clientId: env.GOOGLE_CLIENT_ID,
+            clientSecret: env.GOOGLE_CLIENT_SECRET,
           }),
         ]
       : []),
 
     // GitHub Provider (optional - only if env vars are set)
-    ...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
+    ...(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET
       ? [
           GitHubProvider({
-            clientId: process.env.GITHUB_CLIENT_ID,
-            clientSecret: process.env.GITHUB_CLIENT_SECRET,
+            clientId: env.GITHUB_CLIENT_ID,
+            clientSecret: env.GITHUB_CLIENT_SECRET,
           }),
         ]
       : []),

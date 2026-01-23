@@ -1,0 +1,4 @@
+{"timestamp":"2026-01-22T19:07:57.530Z","type":"commit","message":"💡 8 files changed, no commit in 20min. Checkpoint?","tool_trigger":"Read","session_id":"test-1769108877478"}
+{"timestamp":"2026-01-22T19:07:57.697Z","type":"test","message":"💡 4 files modified without running tests. Run tests?","tool_trigger":"Read","session_id":"test-1769108877669"}
+{"timestamp":"2026-01-22T19:07:57.923Z","type":"error","message":"💡 2 error(s) detected in recent output. Address before continuing?","tool_trigger":"Read","session_id":"test-1769108877880"}
+{"timestamp":"2026-01-22T19:07:58.271Z","type":"context","message":"💡 Context 100% full. Consider handoff or summarizing recent work? Use Handoff tool to pass context to a fresh session.","tool_trigger":"Read","session_id":"test-1769108878243"}

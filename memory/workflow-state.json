@@ -1,18 +1,14 @@
 {
-  "session_id": "test-1769040426599",
+  "session_id": "test-1769108878243",
   "current_prp_step": 0,
   "total_prp_steps": 0,
-  "files_changed": 6,
-  "last_commit_time": "2026-01-21T23:49:06.601Z",
+  "files_changed": 0,
+  "last_commit_time": null,
   "last_test_time": null,
-  "context_pressure": 0,
+  "context_pressure": 1,
   "active_worktrees": [],
   "pending_nudges": [],
   "errors_detected": [],
   "lsp_diagnostics_count": 0,
-  "untested_additions": [
-    "src/new-feature.ts"
-  ],
-  "artifact_chain": [],
-  "associated_entities": []
+  "untested_additions": []
 }

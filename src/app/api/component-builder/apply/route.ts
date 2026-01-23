@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { writeComponent, checkPathExists } from "@/lib/component-builder/writer";
+import { writeComponent, checkPathExists, validateComponentPath } from "@/lib/component-builder/writer";
 
 const ApplyRequestSchema = z.object({
   name: z.string(),
@@ -18,8 +18,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (session.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { name, path, content, force } = ApplyRequestSchema.parse(body);
+
+    const validation = validateComponentPath(path);
+    if (!validation.valid) {
+      return NextResponse.json(
+        { error: validation.error || "Invalid path", path },
+        { status: 400 }
+      );
+    }
 
     if (!force && checkPathExists(path)) {
       return NextResponse.json(

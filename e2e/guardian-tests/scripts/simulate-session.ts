@@ -36,19 +36,14 @@ interface WorkflowState {
 }
 
 interface GuardianState {
-  lastNudge: {
-    type: string | null;
-    timestamp: string | null;
-    toolUseCount: number;
-  };
-  mutedNudges: string[];
-  sessionStats: {
-    nudgesGenerated: number;
-    nudgesActedOn: number;
-    commitsPrompted: number;
-    testsPrompted: number;
-    errorsPrompted: number;
-  };
+  cooldowns: Array<{
+    type: string;
+    last_triggered: string;
+    tool_uses_since: number;
+  }>;
+  total_tool_uses: number;
+  muted_nudges: string[];
+  last_lsp_check?: string;
 }
 
 function ensureMemoryDir(): void {
@@ -82,19 +77,9 @@ function getDefaultWorkflowState(): WorkflowState {
 
 function getDefaultGuardianState(): GuardianState {
   return {
-    lastNudge: {
-      type: null,
-      timestamp: null,
-      toolUseCount: 0,
-    },
-    mutedNudges: [],
-    sessionStats: {
-      nudgesGenerated: 0,
-      nudgesActedOn: 0,
-      commitsPrompted: 0,
-      testsPrompted: 0,
-      errorsPrompted: 0,
-    },
+    cooldowns: [],
+    total_tool_uses: 0,
+    muted_nudges: [],
   };
 }
 
@@ -126,16 +111,19 @@ function setupTestNudge(): void {
   ensureMemoryDir();
   
   const state = getDefaultWorkflowState();
+  state.files_changed = 4; // Below commit threshold (5) but above test threshold (3)
   state.untested_additions = [
     "src/lib/utils/new-helper.ts",
     "src/components/features/new-component.tsx",
   ];
-  state.last_test_time = new Date(Date.now() - 30 * 60 * 1000).toISOString(); // 30 min ago
+  state.last_commit_time = new Date().toISOString(); // Recent commit (avoids commit nudge)
+  state.last_test_time = new Date(Date.now() - 35 * 60 * 1000).toISOString(); // 35 min ago (> 30)
   
   saveJSON(join(MEMORY_DIR, "workflow-state.json"), state);
   saveJSON(join(MEMORY_DIR, "guardian-state.json"), getDefaultGuardianState());
   
   console.log("✅ Workflow state configured:");
+  console.log(`   - files_changed: ${state.files_changed}`);
   console.log(`   - untested_additions: ${state.untested_additions.join(", ")}`);
   console.log("\n🔔 Next tool use should trigger test nudge.");
 }
@@ -169,19 +157,28 @@ function setupContextNudge(): void {
   const state = getDefaultWorkflowState();
   state.context_pressure = 0.85; // Above 0.8 threshold
   
-  // Also set up context ledger
+  // Set up context ledger with enough data to trigger 0.8+ pressure
+  // Formula: (consultations * 0.05) + (totalExcerpts * 0.01) + (toolUses * 0.002)
+  // Need: 0.8+ pressure. With 20 consultations and 60+ excerpts = 1.0 + 0.6 = 0.9+
   const contextLedger = {
     session_id: state.session_id,
-    consultations: Array.from({ length: 50 }, (_, i) => ({
+    consultations: Array.from({ length: 20 }, (_, i) => ({
       timestamp: new Date(Date.now() - i * 60000).toISOString(),
       query: `Query ${i + 1}`,
-      excerpts: Math.floor(Math.random() * 10) + 5,
+      sources_checked: [
+        { type: "glob", pattern: "**/*.ts", files_matched: 5 },
+        { type: "grep", pattern: "function", count: 3 },
+      ],
+      key_findings: ["finding1", "finding2", "finding3"],
     })),
   };
   
+  // Also set guardian state with high tool uses
+  const guardianState = getDefaultGuardianState();
+  
   saveJSON(join(MEMORY_DIR, "workflow-state.json"), state);
   saveJSON(join(MEMORY_DIR, "context-ledger.json"), contextLedger);
-  saveJSON(join(MEMORY_DIR, "guardian-state.json"), getDefaultGuardianState());
+  saveJSON(join(MEMORY_DIR, "guardian-state.json"), guardianState);
   
   console.log("✅ Workflow state configured:");
   console.log(`   - context_pressure: ${state.context_pressure}`);

@@ -50,6 +50,17 @@ import {
   getCurrentLoop,
   clearActivityLog,
 } from "../lib/guardian/activity-narrator";
+import {
+  recordMerge,
+  getMergeHistory,
+  rollbackMerge,
+  formatMergeHistory,
+} from "../lib/guardian/merge-ledger";
+import {
+  getAuditEntries,
+  formatAuditEntries,
+  type AuditCategory,
+} from "../lib/guardian/audit-log";
 
 const ROOT_DIR = resolve(import.meta.dir, "../..");
 const CONFIG_PATH = join(ROOT_DIR, "ccplate.config.json");
@@ -66,6 +77,7 @@ interface ActiveWorktree {
   branch: string;
   agent?: string;
   createdAt: string;
+  note?: string;
 }
 
 interface WorkflowState {
@@ -139,6 +151,58 @@ function validateTaskId(taskId: string): void {
   }
 }
 
+/**
+ * Fuzzy match worktree ID using prefix > substring > Levenshtein
+ * Returns exact match, or best fuzzy match, or null
+ */
+function resolveWorktreeId(input: string): string | null {
+  const state = loadWorkflowState();
+  const ids = state.active_worktrees.map(w => w.id);
+  
+  // Exact match
+  if (ids.includes(input)) return input;
+  
+  // Prefix match
+  const prefixMatches = ids.filter(id => id.startsWith(input));
+  if (prefixMatches.length === 1) return prefixMatches[0];
+  if (prefixMatches.length > 1) {
+    console.error(`Ambiguous worktree ID '${input}'. Matches:`);
+    prefixMatches.forEach(id => console.error(`  - ${id}`));
+    process.exit(1);
+  }
+  
+  // Substring match
+  const substringMatches = ids.filter(id => id.includes(input));
+  if (substringMatches.length === 1) return substringMatches[0];
+  if (substringMatches.length > 1) {
+    console.error(`Ambiguous worktree ID '${input}'. Matches:`);
+    substringMatches.forEach(id => console.error(`  - ${id}`));
+    process.exit(1);
+  }
+  
+  return null;
+}
+
+/**
+ * Resolve worktree ID with fuzzy matching, exit on failure
+ */
+function resolveWorktreeIdOrExit(input: string, _commandName: string): string {
+  const resolved = resolveWorktreeId(input);
+  if (!resolved) {
+    console.error(`Error: Worktree '${input}' not found`);
+    const state = loadWorkflowState();
+    if (state.active_worktrees.length > 0) {
+      console.error(`\nAvailable worktrees:`);
+      state.active_worktrees.forEach(w => console.error(`  - ${w.id}`));
+    }
+    process.exit(1);
+  }
+  if (resolved !== input) {
+    console.log(`Resolved '${input}' → '${resolved}'`);
+  }
+  return resolved;
+}
+
 function ensureMemoryDir(): void {
   const memoryDir = join(ROOT_DIR, "memory");
   if (!existsSync(memoryDir)) {
@@ -146,7 +210,7 @@ function ensureMemoryDir(): void {
   }
 }
 
-function createWorktree(taskId: string): void {
+function createWorktree(taskId: string, options: { note?: string } = {}): void {
   validateTaskId(taskId);
   const config = loadConfig();
   const state = loadWorkflowState();
@@ -169,13 +233,20 @@ function createWorktree(taskId: string): void {
     console.log(`✓ Created worktree: ${worktreePath}`);
     console.log(`✓ Created branch: ${branchName}`);
 
-    state.active_worktrees.push({
+    const worktreeEntry: ActiveWorktree = {
       id: taskId,
       path: worktreePath,
       branch: branchName,
       agent: "implementer",
       createdAt: new Date().toISOString(),
-    });
+    };
+    
+    if (options.note) {
+      worktreeEntry.note = options.note;
+      console.log(`✓ Note: ${options.note}`);
+    }
+
+    state.active_worktrees.push(worktreeEntry);
     saveWorkflowState(state);
     console.log(`✓ Updated workflow-state.json`);
 
@@ -189,12 +260,12 @@ function createWorktree(taskId: string): void {
 }
 
 function validateWorktree(taskId: string): void {
-  validateTaskId(taskId);
+  const resolvedId = resolveWorktreeIdOrExit(taskId, "validate");
   const state = loadWorkflowState();
 
-  const worktree = state.active_worktrees.find((w) => w.id === taskId);
+  const worktree = state.active_worktrees.find((w) => w.id === resolvedId);
   if (!worktree) {
-    console.error(`Error: Worktree '${taskId}' not found`);
+    console.error(`Error: Worktree '${resolvedId}' not found`);
     process.exit(1);
   }
 
@@ -204,18 +275,18 @@ function validateWorktree(taskId: string): void {
     process.exit(1);
   }
 
-  const result = runPreflightChecks(fullPath, taskId);
+  const result = runPreflightChecks(fullPath, resolvedId);
   console.log(formatPreflightResult(result));
   process.exit(result.passed ? 0 : 1);
 }
 
 function fixWorktree(taskId: string): void {
-  validateTaskId(taskId);
+  const resolvedId = resolveWorktreeIdOrExit(taskId, "fix");
   const state = loadWorkflowState();
 
-  const worktree = state.active_worktrees.find((w) => w.id === taskId);
+  const worktree = state.active_worktrees.find((w) => w.id === resolvedId);
   if (!worktree) {
-    console.error(`Error: Worktree '${taskId}' not found`);
+    console.error(`Error: Worktree '${resolvedId}' not found`);
     process.exit(1);
   }
 
@@ -225,7 +296,7 @@ function fixWorktree(taskId: string): void {
     process.exit(1);
   }
 
-  console.log(`🔧 Auto-fixing worktree: ${taskId}\n`);
+  console.log(`🔧 Auto-fixing worktree: ${resolvedId}\n`);
   const fixes = autoFixWorktree(fullPath);
   
   if (fixes.length === 0) {
@@ -237,8 +308,82 @@ function fixWorktree(taskId: string): void {
   }
 
   console.log("\n📋 Running validation...");
-  const result = runPreflightChecks(fullPath, taskId);
+  const result = runPreflightChecks(fullPath, resolvedId);
   console.log(formatPreflightResult(result));
+}
+
+function openWorktree(taskId: string): void {
+  const resolvedId = resolveWorktreeIdOrExit(taskId, "open");
+  const state = loadWorkflowState();
+
+  const worktree = state.active_worktrees.find((w) => w.id === resolvedId);
+  if (!worktree) {
+    console.error(`Error: Worktree '${resolvedId}' not found`);
+    process.exit(1);
+  }
+
+  const fullPath = join(ROOT_DIR, worktree.path);
+  if (!existsSync(fullPath)) {
+    console.error(`Error: Worktree path does not exist: ${fullPath}`);
+    process.exit(1);
+  }
+
+  // Detect editor from environment or default to code
+  const editor = process.env.EDITOR || process.env.VISUAL || "code";
+  const editorCmd = editor === "code" ? `code "${fullPath}"` : `${editor} "${fullPath}"`;
+  
+  try {
+    execSync(editorCmd, { stdio: "inherit" });
+    console.log(`✓ Opened worktree in ${editor}: ${worktree.path}`);
+  } catch (error) {
+    console.error(`Error opening editor: ${(error as Error).message}`);
+    console.log(`\nTry manually: ${editorCmd}`);
+    process.exit(1);
+  }
+}
+
+function cleanupOrphanWorktrees(): void {
+  const state = loadWorkflowState();
+  const orphans: ActiveWorktree[] = [];
+  
+  // Find worktrees whose paths no longer exist on disk
+  for (const wt of state.active_worktrees) {
+    const fullPath = join(ROOT_DIR, wt.path);
+    if (!existsSync(fullPath)) {
+      orphans.push(wt);
+    }
+  }
+  
+  if (orphans.length === 0) {
+    console.log("No orphaned worktrees found");
+    return;
+  }
+  
+  console.log(`Found ${orphans.length} orphaned worktree(s):\n`);
+  for (const wt of orphans) {
+    console.log(`  - ${wt.id} (${wt.path})`);
+  }
+  
+  console.log("\nRemoving from workflow-state.json...\n");
+  
+  state.active_worktrees = state.active_worktrees.filter(
+    wt => !orphans.some(o => o.id === wt.id)
+  );
+  saveWorkflowState(state);
+  
+  for (const wt of orphans) {
+    console.log(`✓ Removed: ${wt.id}`);
+    
+    // Try to delete the branch if it exists
+    try {
+      exec(`git branch -d "${wt.branch}" 2>/dev/null`);
+      console.log(`  ✓ Deleted branch: ${wt.branch}`);
+    } catch {
+      // Branch may already be deleted or not merged
+    }
+  }
+  
+  console.log(`\n✓ Cleaned up ${orphans.length} orphaned worktree(s)`);
 }
 
 function listWorktrees(): void {
@@ -257,20 +402,157 @@ function listWorktrees(): void {
     const status = existsSync(fullPath) ? "" : " [MISSING]";
     if (status) hasStale = true;
     console.log(`${wt.id.padEnd(20)} ${wt.path.padEnd(30)} ${wt.branch.padEnd(25)} ${agent}${status}`);
+    if (wt.note) {
+      console.log(`${"".padEnd(20)} 📝 ${wt.note}`);
+    }
   }
   
   if (hasStale) {
-    console.log("\n⚠ Some worktrees are missing on disk. Run 'ccplate worktree cleanup <id>' to remove stale entries.");
+    console.log("\n⚠ Some worktrees are missing on disk. Run 'ccplate worktree cleanup-orphans' to clean up.");
   }
 }
 
+function showUnifiedStatus(): void {
+  const state = loadWorkflowState();
+  
+  console.log("\n" + "═".repeat(60));
+  console.log("  📊 CCPLATE System Status");
+  console.log("═".repeat(60) + "\n");
+  
+  // Session info
+  if (state.session_id) {
+    console.log(`Session: ${state.session_id}`);
+  }
+  console.log(`Context Pressure: ${(state.context_pressure * 100).toFixed(0)}%`);
+  if (state.files_changed > 0) {
+    console.log(`Files Changed: ${state.files_changed} (uncommitted)`);
+  }
+  
+  // ─── Worktrees ───
+  console.log("\n" + "─".repeat(40));
+  console.log("🌳 Worktrees");
+  console.log("─".repeat(40));
+  
+  if (state.active_worktrees.length === 0) {
+    console.log("  No active worktrees");
+  } else {
+    let missingCount = 0;
+    for (const wt of state.active_worktrees) {
+      const fullPath = join(ROOT_DIR, wt.path);
+      const missing = !existsSync(fullPath);
+      if (missing) missingCount++;
+      const status = missing ? "❌" : "✅";
+      const agent = wt.agent ? ` (${wt.agent})` : "";
+      console.log(`  ${status} ${wt.id}${agent}`);
+      if (wt.note) console.log(`     📝 ${wt.note}`);
+    }
+    if (missingCount > 0) {
+      console.log(`\n  ⚠ ${missingCount} orphaned worktree(s). Run: ccplate worktree cleanup-orphans`);
+    }
+  }
+  
+  // ─── Jobs ───
+  console.log("\n" + "─".repeat(40));
+  console.log("📋 Jobs Queue");
+  console.log("─".repeat(40));
+  
+  const jobs = getAllJobs();
+  const pendingJobs = jobs.filter(j => j.status === "pending");
+  const runningJobs = jobs.filter(j => j.status === "running");
+  const completedJobs = jobs.filter(j => j.status === "completed");
+  const failedJobs = jobs.filter(j => j.status === "failed");
+  
+  if (jobs.length === 0) {
+    console.log("  No jobs");
+  } else {
+    if (runningJobs.length > 0) console.log(`  🔄 Running: ${runningJobs.length}`);
+    if (pendingJobs.length > 0) console.log(`  ⏳ Pending: ${pendingJobs.length}`);
+    if (completedJobs.length > 0) console.log(`  ✅ Completed: ${completedJobs.length}`);
+    if (failedJobs.length > 0) console.log(`  ❌ Failed: ${failedJobs.length}`);
+  }
+  
+  // ─── HITL ───
+  console.log("\n" + "─".repeat(40));
+  console.log("🚨 Human-in-the-Loop Requests");
+  console.log("─".repeat(40));
+  
+  const hitlPending = getPendingHITLRequests();
+  if (hitlPending.length === 0) {
+    console.log("  No pending requests");
+  } else {
+    console.log(`  ⚠ ${hitlPending.length} pending request(s):`);
+    for (const req of hitlPending.slice(0, 3)) {
+      console.log(`    - ${req.id}: ${req.title}`);
+    }
+    if (hitlPending.length > 3) {
+      console.log(`    ... and ${hitlPending.length - 3} more`);
+    }
+    console.log(`\n  Run: ccplate hitl list`);
+  }
+  
+  // ─── Schema Lock ───
+  console.log("\n" + "─".repeat(40));
+  console.log("🔒 Schema Lock");
+  console.log("─".repeat(40));
+  
+  const schemaLock = getSchemaLockStatus();
+  if (!schemaLock) {
+    console.log("  Unlocked");
+  } else {
+    const remaining = new Date(schemaLock.expiresAt).getTime() - Date.now();
+    const minutes = Math.floor(remaining / 60000);
+    console.log(`  🔐 Locked by: ${schemaLock.worktreeId}`);
+    console.log(`     Operation: ${schemaLock.operation}`);
+    console.log(`     Expires in: ${minutes}m`);
+  }
+  
+  // ─── Validation ───
+  console.log("\n" + "─".repeat(40));
+  console.log("🧪 Playwright Validation");
+  console.log("─".repeat(40));
+  
+  console.log(`  ${formatValidationStatus(ROOT_DIR)}`);
+  
+  // ─── Activity ───
+  console.log("\n" + "─".repeat(40));
+  console.log("📝 Activity");
+  console.log("─".repeat(40));
+  
+  const currentLoop = getCurrentLoop(ROOT_DIR);
+  console.log(`  Current loop: ${currentLoop}`);
+  
+  if (state.last_commit_time) {
+    const commitAgo = Math.floor((Date.now() - new Date(state.last_commit_time).getTime()) / 60000);
+    console.log(`  Last commit: ${commitAgo}m ago`);
+  }
+  if (state.last_test_time) {
+    const testAgo = Math.floor((Date.now() - new Date(state.last_test_time).getTime()) / 60000);
+    console.log(`  Last test: ${testAgo}m ago`);
+  }
+  
+  // ─── Errors ───
+  if (state.errors_detected.length > 0) {
+    console.log("\n" + "─".repeat(40));
+    console.log("⚠️  Errors Detected");
+    console.log("─".repeat(40));
+    for (const err of state.errors_detected.slice(0, 5)) {
+      console.log(`  - ${err}`);
+    }
+    if (state.errors_detected.length > 5) {
+      console.log(`  ... and ${state.errors_detected.length - 5} more`);
+    }
+  }
+  
+  console.log("\n" + "═".repeat(60) + "\n");
+}
+
 function cleanupWorktree(taskId: string, deleteBranch = true): void {
-  validateTaskId(taskId);
+  const resolvedId = resolveWorktreeIdOrExit(taskId, "cleanup");
   const state = loadWorkflowState();
 
-  const worktree = state.active_worktrees.find((w) => w.id === taskId);
+  const worktree = state.active_worktrees.find((w) => w.id === resolvedId);
   if (!worktree) {
-    console.error(`Error: Worktree '${taskId}' not found in workflow-state.json`);
+    console.error(`Error: Worktree '${resolvedId}' not found in workflow-state.json`);
     process.exit(1);
   }
 
@@ -290,7 +572,7 @@ function cleanupWorktree(taskId: string, deleteBranch = true): void {
       }
     }
 
-    state.active_worktrees = state.active_worktrees.filter((w) => w.id !== taskId);
+    state.active_worktrees = state.active_worktrees.filter((w) => w.id !== resolvedId);
     saveWorkflowState(state);
     console.log(`✓ Updated workflow-state.json`);
   } catch (error) {
@@ -596,15 +878,19 @@ function printHelp(): void {
 ccplate - CCPLATE Guardian CLI
 
 Usage:
+  ccplate status                      Show unified system dashboard
+  
   ccplate init [--force]              Run discovery interview and create PRD
   ccplate init status                 Show current PRD status
   ccplate init-poc [--force]          Alias for 'ccplate init'
 
-  ccplate worktree create <task-id>   Create isolated worktree for a task
+  ccplate worktree create <id> [--note "desc"]  Create isolated worktree
+  ccplate worktree open <id>          Open worktree in editor (fuzzy match)
   ccplate worktree list               List active worktrees
-  ccplate worktree validate <task-id> Run preflight checks on worktree
-  ccplate worktree fix <task-id>      Auto-fix common worktree issues
-  ccplate worktree cleanup <task-id>  Remove worktree after merge
+  ccplate worktree validate <id>      Run preflight checks (fuzzy match)
+  ccplate worktree fix <id>           Auto-fix common issues (fuzzy match)
+  ccplate worktree cleanup <id>       Remove worktree after merge (fuzzy match)
+  ccplate worktree cleanup-orphans    Remove all stale worktree entries
 
   ccplate schema lock                 Acquire schema lock for current worktree
   ccplate schema unlock               Release schema lock
@@ -651,16 +937,29 @@ Usage:
   ccplate activity clear                          Clear activity log
   ccplate activity loop                           Increment loop counter
 
+  ccplate web search <query>                      Search web via Google Custom Search
+  ccplate web fetch <url>                         Fetch and extract text from URL
+
+  ccplate merge list [--limit N] [--branch name]  Show merge history
+  ccplate merge rollback <id> [--reason "text"]   Rollback a merge by ID
+
+  ccplate audit list [--category type] [--limit N] [--since Nm]  Show audit log
+  ccplate audit categories                        List available audit categories
+
 Examples:
+  ccplate status                              # Unified dashboard
+
   ccplate init
   ccplate init --force
   ccplate init status
 
-  ccplate worktree create oauth-api
+  ccplate worktree create oauth-api --note "OAuth integration"
+  ccplate worktree open oauth                 # Fuzzy match opens oauth-api
   ccplate worktree list
-  ccplate worktree validate oauth-api
+  ccplate worktree validate oauth             # Fuzzy match validates oauth-api
   ccplate worktree fix oauth-api
   ccplate worktree cleanup oauth-api
+  ccplate worktree cleanup-orphans            # Clean all stale entries
 
   ccplate schema lock
   ccplate schema status
@@ -705,7 +1004,9 @@ function parseLimit(args: string[]): number {
 }
 
 async function main(): Promise<void> {
-  if (command === "init" || command === "init-poc") {
+  if (command === "status") {
+    showUnifiedStatus();
+  } else if (command === "init" || command === "init-poc") {
     const force = args.includes("--force");
     if (subcommand === "status") {
       showPRDStatus();
@@ -714,12 +1015,23 @@ async function main(): Promise<void> {
     }
   } else if (command === "worktree") {
     switch (subcommand) {
-      case "create":
+      case "create": {
         if (!taskId) {
-          console.error("Error: Missing task-id\nUsage: ccplate worktree create <task-id>");
+          console.error("Error: Missing task-id\nUsage: ccplate worktree create <task-id> [--note \"description\"]");
           process.exit(1);
         }
-        createWorktree(taskId);
+        // Parse --note flag
+        const noteIndex = args.indexOf("--note");
+        const note = noteIndex !== -1 ? args[noteIndex + 1] : undefined;
+        createWorktree(taskId, { note });
+        break;
+      }
+      case "open":
+        if (!taskId) {
+          console.error("Error: Missing task-id\nUsage: ccplate worktree open <task-id>");
+          process.exit(1);
+        }
+        openWorktree(taskId);
         break;
       case "list":
         listWorktrees();
@@ -744,6 +1056,9 @@ async function main(): Promise<void> {
           process.exit(1);
         }
         cleanupWorktree(taskId);
+        break;
+      case "cleanup-orphans":
+        cleanupOrphanWorktrees();
         break;
       default:
         console.error(`Unknown worktree command: ${subcommand}`);
@@ -1262,6 +1577,196 @@ async function main(): Promise<void> {
       default:
         console.error(`Unknown activity command: ${subcommand}`);
         printHelp();
+        process.exit(1);
+    }
+  } else if (command === "web") {
+    const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
+    
+    if (!TAVILY_API_KEY) {
+      console.error("❌ Missing Tavily API key");
+      console.error("\nSetup:");
+      console.error("1. Get API Key: https://tavily.com/");
+      console.error("2. Add to .env:");
+      console.error("   TAVILY_API_KEY=your-api-key");
+      process.exit(1);
+    }
+    
+    switch (subcommand) {
+      case "search": {
+        const query = args.slice(2).join(" ");
+        if (!query) {
+          console.error("Usage: ccplate web search <query>");
+          process.exit(1);
+        }
+        
+        console.log(`🔍 Searching: ${query}\n`);
+        
+        const response = await fetch("https://api.tavily.com/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            api_key: TAVILY_API_KEY,
+            query,
+            max_results: 5,
+          }),
+        });
+        
+        if (!response.ok) {
+          console.error(`API Error: ${response.status}`);
+          process.exit(1);
+        }
+        
+        const data = await response.json();
+        for (const item of data.results || []) {
+          console.log(`📄 ${item.title}`);
+          console.log(`   ${item.url}`);
+          console.log(`   ${item.content?.slice(0, 200)}...\n`);
+        }
+        break;
+      }
+      case "fetch": {
+        const fetchUrl = taskId;
+        if (!fetchUrl) {
+          console.error("Usage: ccplate web fetch <url>");
+          process.exit(1);
+        }
+        
+        console.log(`📥 Fetching: ${fetchUrl}\n`);
+        
+        const response = await fetch(fetchUrl, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; CCPLATEBot/1.0)" },
+        });
+        
+        if (!response.ok) {
+          console.error(`Fetch Error: ${response.status}`);
+          process.exit(1);
+        }
+        
+        let text = await response.text();
+        // Basic HTML to text
+        text = text
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/&nbsp;/g, " ")
+          .replace(/&amp;/g, "&")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 5000);
+        
+        console.log(text);
+        break;
+      }
+      default:
+        console.error(`Unknown web command: ${subcommand}`);
+        console.log("Usage: ccplate web [search|fetch]");
+        process.exit(1);
+    }
+  } else if (command === "merge") {
+    switch (subcommand) {
+      case "list": {
+        const limitIndex = args.indexOf("--limit");
+        const branchIndex = args.indexOf("--branch");
+        const limit = limitIndex !== -1 ? parseInt(args[limitIndex + 1], 10) : 20;
+        const branch = branchIndex !== -1 ? args[branchIndex + 1] : undefined;
+        
+        const records = getMergeHistory(ROOT_DIR, { limit, branch });
+        console.log(formatMergeHistory(records));
+        break;
+      }
+      case "rollback": {
+        if (!taskId) {
+          console.error("Error: Missing merge ID\nUsage: ccplate merge rollback <id> [--reason \"text\"]");
+          process.exit(1);
+        }
+        const reasonIndex = args.indexOf("--reason");
+        const reason = reasonIndex !== -1 ? args.slice(reasonIndex + 1).join(" ") : undefined;
+        
+        const result = rollbackMerge(ROOT_DIR, taskId, { reason });
+        if (result.success) {
+          console.log(`✅ ${result.message}`);
+          if (result.newCommit) {
+            console.log(`   New commit: ${result.newCommit}`);
+          }
+        } else {
+          console.error(`❌ ${result.message}`);
+          process.exit(1);
+        }
+        break;
+      }
+      case "record": {
+        // Internal command for recording merges (used by team-coordinator)
+        const worktreeId = args[3];
+        const branch = args[4];
+        const targetBranch = args[5];
+        const preMergeCommit = args[6];
+        const postMergeCommit = args[7];
+        
+        if (!worktreeId || !branch || !targetBranch || !preMergeCommit || !postMergeCommit) {
+          console.error("Usage: ccplate merge record <worktreeId> <branch> <targetBranch> <preMergeCommit> <postMergeCommit>");
+          process.exit(1);
+        }
+        
+        const record = recordMerge(ROOT_DIR, {
+          worktreeId,
+          branch,
+          targetBranch,
+          preMergeCommit,
+          postMergeCommit,
+          mergedBy: process.env.USER || "unknown",
+        });
+        console.log(`✓ Merge recorded: ${record.id}`);
+        break;
+      }
+      default:
+        console.error(`Unknown merge command: ${subcommand}`);
+        console.log("Usage: ccplate merge [list|rollback|record]");
+        process.exit(1);
+    }
+  } else if (command === "audit") {
+    switch (subcommand) {
+      case "list": {
+        const limitIndex = args.indexOf("--limit");
+        const categoryIndex = args.indexOf("--category");
+        const sinceIndex = args.indexOf("--since");
+        
+        const limit = limitIndex !== -1 ? parseInt(args[limitIndex + 1], 10) : 50;
+        const category = categoryIndex !== -1 ? args[categoryIndex + 1] as AuditCategory : undefined;
+        
+        let since: Date | undefined;
+        if (sinceIndex !== -1 && args[sinceIndex + 1]) {
+          const minutes = parseInt(args[sinceIndex + 1], 10);
+          if (!isNaN(minutes)) {
+            since = new Date(Date.now() - minutes * 60 * 1000);
+          }
+        }
+        
+        const entries = getAuditEntries(ROOT_DIR, { limit, category, since });
+        console.log(formatAuditEntries(entries));
+        break;
+      }
+      case "categories": {
+        console.log("Audit Categories:\n");
+        const categories: AuditCategory[] = [
+          "admin_settings",
+          "user_management",
+          "schema_change",
+          "security",
+          "hitl",
+          "merge",
+          "worktree",
+          "auth",
+          "file_upload",
+          "api_access",
+        ];
+        for (const cat of categories) {
+          console.log(`  - ${cat}`);
+        }
+        break;
+      }
+      default:
+        console.error(`Unknown audit command: ${subcommand}`);
+        console.log("Usage: ccplate audit [list|categories]");
         process.exit(1);
     }
   } else {

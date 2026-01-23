@@ -2,17 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
-import { writeAPIFiles, type GeneratedFiles } from "@/lib/api-builder";
+import {
+  APISpecSchema,
+  generateFiles,
+  writeAPIFiles,
+  checkFilesExist,
+} from "@/lib/api-builder";
 
 const applyRequestSchema = z.object({
-  files: z.object({
-    routePath: z.string(),
-    routeContent: z.string(),
-    dynamicRoutePath: z.string().nullable(),
-    dynamicRouteContent: z.string().nullable(),
-  }),
+  spec: APISpecSchema,
   overwrite: z.boolean().default(false),
 });
+
+function isValidBasePath(basePath: string): boolean {
+  if (!basePath.startsWith("/api/")) return false;
+  if (basePath.includes("..") || basePath.includes("\\")) return false;
+  if (basePath.includes("//")) return false;
+  return /^\/api\/[a-z0-9\-/_]+$/.test(basePath);
+}
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -20,16 +27,30 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  if (session.user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  }
+
   try {
     const body = await request.json();
     const validated = applyRequestSchema.parse(body);
 
-    const files: GeneratedFiles = {
-      routePath: validated.files.routePath,
-      routeContent: validated.files.routeContent,
-      dynamicRoutePath: validated.files.dynamicRoutePath,
-      dynamicRouteContent: validated.files.dynamicRouteContent,
-    };
+    if (!isValidBasePath(validated.spec.basePath)) {
+      return NextResponse.json(
+        { error: "Invalid basePath. Must start with /api/ and contain only lowercase letters, numbers, -, _, /" },
+        { status: 400 }
+      );
+    }
+
+    const files = generateFiles(validated.spec);
+    const existingFiles = checkFilesExist(files, process.cwd());
+
+    if (existingFiles.length > 0 && !validated.overwrite) {
+      return NextResponse.json(
+        { error: "Files already exist", existingFiles },
+        { status: 409 }
+      );
+    }
 
     writeAPIFiles(files, process.cwd());
 

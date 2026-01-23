@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import { getJobByHitlRequest, resumeJob, pauseJob } from './job-queue';
 
 const MEMORY_DIR = join(process.cwd(), 'memory');
 const HITL_FILE = join(MEMORY_DIR, 'hitl-requests.json');
@@ -60,6 +61,9 @@ function saveRequests(requests: HITLRequest[]): void {
   writeFileSync(HITL_FILE, JSON.stringify(requests, null, 2));
 }
 
+/**
+ * Request human decision, optionally pausing a job until resolved
+ */
 export function requestHumanDecision(request: Omit<HITLRequest, 'id' | 'status' | 'createdAt'>): HITLRequest {
   const requests = loadRequests();
   
@@ -73,6 +77,12 @@ export function requestHumanDecision(request: Omit<HITLRequest, 'id' | 'status' 
   requests.push(newRequest);
   saveRequests(requests);
   
+  // If this HITL request is associated with a job, pause that job
+  if (request.jobId) {
+    pauseJob(request.jobId, newRequest.id, request.reason);
+    console.log(`⏸️  Job ${request.jobId} paused awaiting HITL`);
+  }
+  
   console.log(`🚨 HITL Request: ${newRequest.title}`);
   console.log(`   Reason: ${newRequest.reason}`);
   console.log(`   ID: ${newRequest.id}`);
@@ -80,6 +90,9 @@ export function requestHumanDecision(request: Omit<HITLRequest, 'id' | 'status' 
   return newRequest;
 }
 
+/**
+ * Resolve HITL request and auto-resume any paused job
+ */
 export function resolveHITLRequest(
   id: string, 
   resolution: 'approved' | 'rejected' | 'modified',
@@ -100,6 +113,19 @@ export function resolveHITLRequest(
   };
   
   saveRequests(requests);
+  
+  // Auto-resume any job that was waiting on this HITL request
+  const pausedJob = getJobByHitlRequest(id);
+  if (pausedJob) {
+    if (resolution === 'approved') {
+      resumeJob(pausedJob.id);
+      console.log(`▶️  Job ${pausedJob.id} resumed after HITL approval`);
+    } else {
+      // For rejected/modified, job stays paused - may need manual intervention
+      console.log(`⚠️  Job ${pausedJob.id} remains paused (HITL ${resolution})`);
+    }
+  }
+  
   return requests[index];
 }
 

@@ -95,7 +95,7 @@ export default function APIBuilderPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          files: result.files,
+          spec: result.spec,
           overwrite: result.existingFiles.length > 0,
         }),
       });

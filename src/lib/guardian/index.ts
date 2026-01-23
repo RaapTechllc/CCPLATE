@@ -50,6 +50,11 @@ export {
   getJob,
   getAllJobs,
   getPendingJobs,
+  getPausedJobs,
+  getJobsAwaitingHitl,
+  pauseJob,
+  resumeJob,
+  getJobByHitlRequest,
   type GuardianJob,
 } from './job-queue';
 
@@ -132,3 +137,28 @@ export {
 
 // Harness (re-export barrel)
 export * from './harness';
+
+// Merge ledger
+export {
+  recordMerge,
+  getMergeHistory,
+  getLastMerge,
+  rollbackMerge,
+  formatMergeHistory,
+  type MergeRecord,
+} from './merge-ledger';
+
+// Audit log
+export {
+  logAudit,
+  logSettingChange,
+  logPermissionChange,
+  logSchemaChange,
+  logSecurityEvent,
+  logHITLDecision,
+  logAuthEvent,
+  getAuditEntries,
+  formatAuditEntries,
+  type AuditCategory,
+  type AuditEntry,
+} from './audit-log';

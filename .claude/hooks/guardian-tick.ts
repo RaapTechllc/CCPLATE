@@ -484,18 +484,24 @@ function calculateContextPressure(ledger: ContextLedger, toolUses: number): numb
   
   let totalExcerpts = 0;
   for (const c of ledger.consultations) {
-    for (const source of c.sources_checked) {
-      if (source.files_matched) {
-        totalExcerpts += source.files_matched;
-      }
-      if (source.count) {
-        totalExcerpts += source.count;
-      }
-      if (source.file) {
-        totalExcerpts += 1;
+    // Guard against missing sources_checked array
+    if (c.sources_checked && Array.isArray(c.sources_checked)) {
+      for (const source of c.sources_checked) {
+        if (source.files_matched) {
+          totalExcerpts += source.files_matched;
+        }
+        if (source.count) {
+          totalExcerpts += source.count;
+        }
+        if (source.file) {
+          totalExcerpts += 1;
+        }
       }
     }
-    totalExcerpts += c.key_findings.length;
+    // Guard against missing key_findings array
+    if (c.key_findings && Array.isArray(c.key_findings)) {
+      totalExcerpts += c.key_findings.length;
+    }
   }
   
   const pressure = (consultations * 0.05) + (totalExcerpts * 0.01) + (toolUses * 0.002);
@@ -842,6 +848,40 @@ function evaluateNudges(
   return null;
 }
 
+/**
+ * Log errors to guardian-errors.log in standardized format
+ */
+function logHookError(
+  source: string,
+  operation: string,
+  error: Error | unknown,
+  input?: unknown
+): void {
+  const err = error instanceof Error ? error : new Error(String(error));
+  
+  const errorEntry = {
+    id: `err-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    timestamp: new Date().toISOString(),
+    source: "claude_hook",
+    operation: `${source}:${operation}`,
+    error: {
+      message: err.message,
+      name: err.name,
+      stack: err.stack,
+    },
+    input: input !== undefined ? String(input).slice(0, 500) : undefined,
+    severity: "error",
+  };
+  
+  const errorLogPath = join(MEMORY_DIR, "guardian-errors.log");
+  try {
+    appendFileSync(errorLogPath, JSON.stringify(errorEntry) + "\n");
+    console.error(`❌ [Guardian ${source}] ${operation}: ${err.message}`);
+  } catch {
+    // Can't write log
+  }
+}
+
 async function main(): Promise<void> {
   // Ensure memory directory exists
   ensureDir(MEMORY_DIR);
@@ -850,22 +890,21 @@ async function main(): Promise<void> {
 
   try {
     const text = await Bun.stdin.text();
-    input = JSON.parse(text) as HookInput;
-  } catch (error) {
-    const errorLog = {
-      timestamp: new Date().toISOString(),
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-      type: "input_parse_error",
-    };
     
-    const errorLogPath = join(MEMORY_DIR, "guardian-errors.log");
-    try {
-      appendFileSync(errorLogPath, JSON.stringify(errorLog) + "\n");
-    } catch {
-      // Can't write log, just exit
+    if (!text || text.trim() === "") {
+      logHookError("guardian-tick", "input_read", new Error("Empty stdin received"));
+      process.exit(0);
     }
     
+    input = JSON.parse(text) as HookInput;
+    
+    // Validate required fields
+    if (!input.tool_name) {
+      logHookError("guardian-tick", "input_validate", new Error("Missing tool_name"), text.slice(0, 200));
+      process.exit(0);
+    }
+  } catch (error) {
+    logHookError("guardian-tick", "input_parse", error);
     process.exit(0);
   }
 
@@ -1042,6 +1081,7 @@ async function main(): Promise<void> {
   process.exit(0);
 }
 
-main().catch(() => {
+main().catch((error) => {
+  logHookError("guardian-tick", "unhandled", error);
   process.exit(0);
 });

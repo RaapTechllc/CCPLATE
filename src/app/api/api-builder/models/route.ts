@@ -11,6 +11,10 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  if (session.user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  }
+
   try {
     const schemaPath = join(process.cwd(), "prisma", "schema.prisma");
     const schemaContent = readFileSync(schemaPath, "utf-8");

@@ -46,6 +46,7 @@ export function RegisterForm() {
           name: validatedData.name,
           email: validatedData.email,
           password: validatedData.password,
+          confirmPassword: validatedData.confirmPassword,
         }),
       })
 

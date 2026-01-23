@@ -23,8 +23,12 @@ export default defineConfig({
   // Reporter to use
   reporter: [
     ["html", { open: "never" }],
+    ["json", { outputFile: "test-results/report.json" }],
     ["list"],
   ],
+
+  // Global timeout for each test
+  timeout: 60000,
 
   // Shared settings for all the projects below
   use: {
@@ -36,6 +40,12 @@ export default defineConfig({
 
     // Capture screenshot on failure
     screenshot: "only-on-failure",
+
+    // Navigation timeout
+    navigationTimeout: 45000,
+
+    // Action timeout
+    actionTimeout: 15000,
   },
 
   // Configure projects for major browsers
@@ -60,9 +70,9 @@ export default defineConfig({
     // },
   ],
 
-  // Run your local dev server before starting the tests
+  // Run production build for faster tests (dev server compiles on-demand, too slow)
   webServer: {
-    command: "npm run dev",
+    command: process.env.CI ? "npm run build && npm start" : "npm start",
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,

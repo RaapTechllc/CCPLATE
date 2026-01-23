@@ -10,6 +10,50 @@
  */
 
 import * as path from "path";
+import { appendFileSync, existsSync, mkdirSync } from "fs";
+
+const MEMORY_DIR = path.join(process.env.CLAUDE_PROJECT_DIR || ".", "memory");
+
+function ensureDir(dir: string): void {
+  try {
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+  } catch {
+    // Silently fail
+  }
+}
+
+function logHookError(
+  operation: string,
+  error: Error | unknown,
+  input?: unknown
+): void {
+  ensureDir(MEMORY_DIR);
+  const err = error instanceof Error ? error : new Error(String(error));
+  
+  const errorEntry = {
+    id: `err-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    timestamp: new Date().toISOString(),
+    source: "claude_hook",
+    operation: `path-guard:${operation}`,
+    error: {
+      message: err.message,
+      name: err.name,
+      stack: err.stack,
+    },
+    input: input !== undefined ? String(input).slice(0, 500) : undefined,
+    severity: "error",
+  };
+  
+  const errorLogPath = path.join(MEMORY_DIR, "guardian-errors.log");
+  try {
+    appendFileSync(errorLogPath, JSON.stringify(errorEntry) + "\n");
+    console.error(`❌ [Guardian path-guard] ${operation}: ${err.message}`);
+  } catch {
+    // Can't write log
+  }
+}
 
 interface HookInput {
   tool_name: string;
@@ -242,8 +286,20 @@ async function main(): Promise<void> {
   
   try {
     const text = await Bun.stdin.text();
+    
+    if (!text || text.trim() === "") {
+      logHookError("input_read", new Error("Empty stdin received"));
+      const response: BlockResponse = {
+        decision: "block",
+        reason: "Empty hook input",
+      };
+      console.log(JSON.stringify(response));
+      process.exit(2);
+    }
+    
     input = JSON.parse(text) as HookInput;
-  } catch {
+  } catch (error) {
+    logHookError("input_parse", error);
     const response: BlockResponse = {
       decision: "block",
       reason: "Failed to parse hook input",
@@ -318,6 +374,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
+  logHookError("unhandled", error);
   const response: BlockResponse = {
     decision: "block",
     reason: `Hook error: ${error instanceof Error ? error.message : "Unknown error"}`,

@@ -3,19 +3,52 @@ import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { PromptsFileSchema, type Prompt, type PromptVersion, type PromptVariable } from "./schema";
 
-const PROMPTS_FILE = path.join(process.cwd(), "src/lib/prompt-builder/prompts.json");
+const DATA_DIR = path.join(process.cwd(), "data");
+const PROMPTS_FILE = path.join(DATA_DIR, "prompts.json");
+const LEGACY_PROMPTS_FILE = path.join(process.cwd(), "src/lib/prompt-builder/prompts.json");
+
+async function ensureDataDir(): Promise<void> {
+  try {
+    await fs.access(DATA_DIR);
+  } catch {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+  }
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function loadPrompts(): Promise<Prompt[]> {
   try {
-    const data = await fs.readFile(PROMPTS_FILE, "utf-8");
-    const parsed = PromptsFileSchema.parse(JSON.parse(data));
-    return parsed.prompts;
+    await ensureDataDir();
+
+    if (await fileExists(PROMPTS_FILE)) {
+      const data = await fs.readFile(PROMPTS_FILE, "utf-8");
+      const parsed = PromptsFileSchema.parse(JSON.parse(data));
+      return parsed.prompts;
+    }
+
+    if (await fileExists(LEGACY_PROMPTS_FILE)) {
+      const legacyData = await fs.readFile(LEGACY_PROMPTS_FILE, "utf-8");
+      const parsed = PromptsFileSchema.parse(JSON.parse(legacyData));
+      await savePrompts(parsed.prompts);
+      return parsed.prompts;
+    }
+
+    return [];
   } catch {
     return [];
   }
 }
 
 export async function savePrompts(prompts: Prompt[]): Promise<void> {
+  await ensureDataDir();
   const data = JSON.stringify({ prompts }, null, 2);
   await fs.writeFile(PROMPTS_FILE, data, "utf-8");
 }

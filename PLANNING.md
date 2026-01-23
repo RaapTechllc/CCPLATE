@@ -75,7 +75,7 @@ User → Frontend → API → Database
 - [x] Authorization model defined (role-based: user/admin)
 - [x] Secrets management approach (environment variables via `.env.local`)
 - [x] Input validation strategy (Zod schemas on all API endpoints)
-- [ ] CORS/CSP policies
+- [x] CSP headers configured (baseline policy in `next.config.ts`); CORS TBD
 
 ## Performance Targets
 

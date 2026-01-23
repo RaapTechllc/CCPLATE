@@ -10,6 +10,52 @@
  * - 2: Block the command (with reason)
  */
 
+import { appendFileSync, existsSync, mkdirSync } from "fs";
+import { join } from "path";
+
+const MEMORY_DIR = join(process.env.CLAUDE_PROJECT_DIR || ".", "memory");
+
+function ensureDir(dir: string): void {
+  try {
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+  } catch {
+    // Silently fail
+  }
+}
+
+function logHookError(
+  operation: string,
+  error: Error | unknown,
+  input?: unknown
+): void {
+  ensureDir(MEMORY_DIR);
+  const err = error instanceof Error ? error : new Error(String(error));
+  
+  const errorEntry = {
+    id: `err-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    timestamp: new Date().toISOString(),
+    source: "claude_hook",
+    operation: `pre-tool-use:${operation}`,
+    error: {
+      message: err.message,
+      name: err.name,
+      stack: err.stack,
+    },
+    input: input !== undefined ? String(input).slice(0, 500) : undefined,
+    severity: "error",
+  };
+  
+  const errorLogPath = join(MEMORY_DIR, "guardian-errors.log");
+  try {
+    appendFileSync(errorLogPath, JSON.stringify(errorEntry) + "\n");
+    console.error(`❌ [Guardian pre-tool-use] ${operation}: ${err.message}`);
+  } catch {
+    // Can't write log
+  }
+}
+
 interface HookInput {
   tool_name: string;
   tool_input: Record<string, unknown>;
@@ -143,8 +189,20 @@ async function main(): Promise<void> {
   try {
     // Read JSON from stdin
     const text = await Bun.stdin.text();
+    
+    if (!text || text.trim() === "") {
+      logHookError("input_read", new Error("Empty stdin received"));
+      const response: BlockResponse = {
+        decision: "block",
+        reason: "Empty hook input",
+      };
+      console.log(JSON.stringify(response));
+      process.exit(2);
+    }
+    
     input = JSON.parse(text) as HookInput;
-  } catch {
+  } catch (error) {
+    logHookError("input_parse", error);
     // If we can't parse input, block by default
     const response: BlockResponse = {
       decision: "block",
@@ -194,6 +252,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
+  logHookError("unhandled", error);
   const response: BlockResponse = {
     decision: "block",
     reason: `Hook error: ${error instanceof Error ? error.message : "Unknown error"}`,

@@ -26,6 +26,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (session.user.role !== "ADMIN") {
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    }
+
     const rateLimitResult = rateLimit(`schema-builder:${session.user.id ?? "anonymous"}`, aiRateLimit);
     if (!rateLimitResult.success) {
       return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
