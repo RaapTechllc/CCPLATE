@@ -1,6 +1,6 @@
 # Project: CCPLATE
 
-> Next.js + TypeScript web application with PostgreSQL database.
+> Next.js + TypeScript web application with PostgreSQL database and Guardian control plane.
 
 ## Bootstrap Instructions
 
@@ -28,14 +28,144 @@ This is a bootstrapped Claude Code project. On first run:
 - **Open studio:** `npm run db:studio`
 - **Seed database:** `npm run db:seed`
 
+### Guardian CLI Commands
+
+The `ccplate` CLI provides unified access to Guardian features:
+
+```bash
+# Status & Dashboard
+ccplate status                    # Unified dashboard (worktrees, jobs, HITL, validation)
+
+# Worktree Management
+ccplate worktree create <name>    # Create isolated worktree (--note "description")
+ccplate worktree list             # List all worktrees
+ccplate worktree open <id>        # Open worktree in editor
+ccplate worktree cleanup          # Remove merged worktrees
+ccplate worktree cleanup-orphans  # Bulk cleanup stale worktrees
+ccplate worktree validate         # Run preflight validation
+ccplate worktree fix              # Auto-fix common issues
+
+# Schema Lock (DB migration protection)
+ccplate schema lock               # Acquire schema lock
+ccplate schema unlock             # Release schema lock
+ccplate schema status             # Check lock status
+
+# Knowledge Mesh (Cross-worktree intelligence)
+ccplate mesh broadcast <msg>      # Broadcast to all worktrees
+ccplate mesh list                 # List recent broadcasts
+ccplate mesh inject <id>          # Inject knowledge into worktree
+
+# Human-in-the-Loop
+ccplate hitl list                 # List pending HITL requests
+ccplate hitl approve <id>         # Approve request
+ccplate hitl reject <id>          # Reject request
+
+# Validation Loop
+ccplate validate status           # Validation status
+ccplate validate run              # Run Playwright tests
+ccplate validate register <test>  # Register test for task
+ccplate validate check            # Check registered tests
+ccplate validate fixloop          # Auto-spawn fix loop on failure
+
+# Activity Narrator
+ccplate activity status           # Current activity status
+ccplate activity start <desc>     # Start activity tracking
+ccplate activity complete         # Mark activity complete
+ccplate activity loop <n>         # Record loop iteration
+
+# POC Harness (Variant testing)
+ccplate harness --variants N --goal "desc"  # Spawn N variant worktrees
+ccplate harness status            # View run status
+ccplate harness pick <variant>    # Merge selected variant
+ccplate harness cleanup           # Remove non-selected worktrees
+
+# LSP Sidecar
+ccplate lsp start                 # Start LSP server
+ccplate lsp diagnostics <file>    # Get diagnostics for file
+ccplate lsp stop                  # Stop LSP server
+
+# Merge & Rollback
+ccplate merge list                # List recent merges
+ccplate merge rollback <id>       # Rollback a merge
+
+# Audit Logging
+ccplate audit list                # List audit entries
+ccplate audit categories          # List audit categories
+
+# AI Builders (CLI interface)
+ccplate hook generate <desc>      # Generate hook code
+ccplate component generate <desc> # Generate React component
+ccplate api generate <desc>       # Generate API endpoint
+```
+
 ## Tech Stack
 
 - **Language:** TypeScript
-- **Framework:** Next.js 14 (App Router)
+- **Framework:** Next.js 16.1.4 (App Router)
+- **React:** 19.2.3
 - **Database:** PostgreSQL
-- **ORM:** Prisma (recommended)
+- **ORM:** Prisma 7.2.0
 - **Styling:** Tailwind CSS
 - **Hosting:** Vercel (recommended)
+
+## Guardian System
+
+CCPLATE includes a comprehensive Guardian control plane for AI workflow supervision.
+
+### Architecture Overview
+
+The Guardian system provides:
+
+- **Workflow Supervision** - Nudges for commits, tests, errors, context pressure
+- **Worktree Isolation** - Git worktrees for parallel agent work
+- **Schema Lock** - Database migration coordination
+- **Knowledge Mesh** - Cross-worktree intelligence sharing
+- **Human-in-the-Loop** - Approval gates for destructive operations
+- **Validation Loop** - Playwright test integration with auto-fix
+- **Activity Narrator** - Human-readable session logs
+- **POC Harness** - Variant comparison testing
+
+### Guardian Hooks
+
+Located in `.claude/hooks/`:
+
+| Hook | Event | Purpose |
+|------|-------|---------|
+| `guardian-tick.ts` | PostToolUse | Main supervision loop (nudges, activity, knowledge) |
+| `path-guard.ts` | PreToolUse | Path protection and worktree enforcement |
+| `pre-tool-use.ts` | PreToolUse | Tool validation and rate limiting |
+
+### Guardian Modules
+
+Located in `src/lib/guardian/`:
+
+| Module | LOC | Purpose |
+|--------|-----|---------|
+| `workflow-state.ts` | Core | Workflow state management |
+| `job-queue.ts` | Core | Job queue with pause/resume |
+| `worktree.ts` | Core | Git worktree management |
+| `schema-lock.ts` | Core | DB schema lock coordination |
+| `knowledge-mesh.ts` | Core | Cross-worktree knowledge |
+| `hitl.ts` | Core | Human-in-the-loop requests |
+| `preflight.ts` | Core | Worktree validation |
+| `notifications.ts` | Core | Slack/Discord/Email notifications |
+| `prd.ts` | Phase 7 | PRD discovery interview |
+| `validation-loop.ts` | Phase 7 | Playwright test integration |
+| `activity.ts` | Phase 7 | Activity narrator |
+| `context-ledger.ts` | RLM | Context pressure tracking |
+| `merge-ledger.ts` | Merge | Merge history and rollback |
+| `audit-log.ts` | Audit | Audit trail logging |
+| `error-log.ts` | Error | Standardized error logging |
+
+### Agents
+
+Located in `.claude/agents/`:
+
+| Agent | Purpose |
+|-------|---------|
+| `meta-agent.md` | Creates new specialized agents |
+| `rlm-adapter.md` | Context-aware exploration with ledger |
+| `team-coordinator.md` | Multi-worktree orchestration |
 
 ## Code Style
 
@@ -53,6 +183,23 @@ This is a bootstrapped Claude Code project. On first run:
 - **Types/Interfaces:** `PascalCase`
 
 ## Memory Protocol
+
+**Memory Files:**
+
+| File | Purpose |
+|------|---------|
+| `memory/workflow-state.json` | Current workflow state, PRD metadata |
+| `memory/guardian-state.json` | Nudge cooldowns, tick counts |
+| `memory/guardian-nudges.jsonl` | Nudge history (JSONL) |
+| `memory/guardian-last.txt` | Last nudge for injection |
+| `memory/context-ledger.json` | Context pressure tracking |
+| `memory/ACTIVITY.md` | Human-readable activity log |
+| `memory/audit-log.jsonl` | Audit trail (JSONL) |
+| `memory/merge-ledger.jsonl` | Merge history for rollback |
+| `memory/guardian-errors.log` | Error log (JSONL) |
+| `memory/prd.md` | Frozen PRD (human-readable) |
+| `memory/prd.json` | Frozen PRD (machine-readable) |
+| `memory/harness/` | POC harness reports |
 
 **After completing each task:**
 
@@ -87,7 +234,9 @@ If the same error occurs 3 times:
 
 > Claude: Add discovered issues here as you encounter them.
 
-- [No warnings yet - add as discovered]
+- **E2E Test Timeouts:** Production server can be slow (~6s per page) causing Playwright timeouts. Consider using dev server for tests or increasing timeout values.
+- **Prisma Patches Available:** Non-breaking patches available for Prisma. Safe to update when convenient.
+- **GitHub Webhook Partial:** The GitHub webhook parses @guardian commands but doesn't yet enqueue jobs. Documented as backlog item.
 
 ## Architecture
 
@@ -95,22 +244,66 @@ If the same error occurs 3 times:
 
 ```
 CCPLATE/
+├── .claude/
+│   ├── agents/               # Subagent definitions
+│   │   ├── meta-agent.md     # Agent factory
+│   │   ├── rlm-adapter.md    # Context exploration
+│   │   └── team-coordinator.md # Worktree orchestration
+│   └── hooks/                # Claude Code hooks
+│       ├── guardian-tick.ts  # PostToolUse supervision
+│       ├── path-guard.ts     # PreToolUse protection
+│       └── pre-tool-use.ts   # Tool validation
 ├── src/
-│   ├── app/              # Next.js App Router pages
-│   │   ├── layout.tsx    # Root layout
-│   │   ├── page.tsx      # Home page
-│   │   └── api/          # API routes
-│   ├── components/       # React components
-│   │   ├── ui/           # Reusable UI components
-│   │   └── features/     # Feature-specific components
-│   ├── generated/        # Auto-generated (Prisma client)
-│   ├── lib/              # Utility functions and configs
-│   │   └── db.ts         # Prisma client singleton
-│   └── types/            # TypeScript type definitions
+│   ├── app/                  # Next.js App Router pages
+│   │   ├── layout.tsx        # Root layout
+│   │   ├── page.tsx          # Home page
+│   │   ├── api/              # API routes
+│   │   └── (protected)/
+│   │       └── guardian/     # Guardian Web UI
+│   │           ├── page.tsx          # Dashboard
+│   │           ├── timeline/         # Session timeline
+│   │           ├── worktrees/        # Worktree status
+│   │           └── agents/           # Agent activity
+│   ├── cli/
+│   │   └── ccplate.ts        # Guardian CLI (22+ command families)
+│   ├── components/           # React components
+│   │   ├── ui/               # Reusable UI components
+│   │   └── features/         # Feature-specific components
+│   ├── generated/            # Auto-generated (Prisma client)
+│   ├── lib/
+│   │   ├── db.ts             # Prisma client singleton
+│   │   ├── guardian/         # Guardian control plane (~4,700 LOC)
+│   │   │   ├── workflow-state.ts
+│   │   │   ├── job-queue.ts
+│   │   │   ├── worktree.ts
+│   │   │   ├── schema-lock.ts
+│   │   │   ├── knowledge-mesh.ts
+│   │   │   ├── hitl.ts
+│   │   │   ├── preflight.ts
+│   │   │   ├── notifications.ts
+│   │   │   ├── prd.ts
+│   │   │   ├── validation-loop.ts
+│   │   │   ├── activity.ts
+│   │   │   ├── context-ledger.ts
+│   │   │   ├── merge-ledger.ts
+│   │   │   ├── audit-log.ts
+│   │   │   ├── error-log.ts
+│   │   │   └── harness/      # POC harness (~991 LOC)
+│   │   ├── agent-builder/    # AI agent builder
+│   │   ├── hook-builder/     # AI hook builder
+│   │   ├── prompt-builder/   # AI prompt builder
+│   │   ├── schema-builder/   # AI schema builder
+│   │   ├── api-builder/      # AI API builder
+│   │   └── component-builder/ # AI component builder
+│   ├── lsp/
+│   │   └── sidecar.ts        # LSP sidecar server (~467 LOC)
+│   └── types/                # TypeScript type definitions
+├── memory/                   # Guardian state files
 ├── prisma/
-│   └── schema.prisma     # Database schema
-├── public/               # Static assets
-└── tests/                # Test files
+│   └── schema.prisma         # Database schema
+├── public/                   # Static assets
+├── e2e/                      # Playwright E2E tests
+└── tests/                    # Unit/integration tests
 ```
 
 ### Key Patterns
@@ -119,13 +312,17 @@ CCPLATE/
 - Client components marked with "use client" when needed
 - API routes in `src/app/api/` for backend logic
 - Prisma for type-safe database access
+- Guardian hooks for workflow supervision
+- Worktree isolation for parallel agent work
 
 ### Integration Points
 
 - PostgreSQL database via Prisma ORM
 - Environment variables in `.env.local`
+- Guardian state in `memory/` directory
+- Claude Code hooks in `.claude/hooks/`
 
 ---
 
-**Last Updated:** 2026-01-20
+**Last Updated:** 2026-01-23
 **Bootstrap Version:** 1.0
