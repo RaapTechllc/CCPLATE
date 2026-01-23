@@ -1,105 +1,70 @@
 /**
  * Authentication fixtures for Playwright E2E tests
- * Provides authenticated page contexts for testing protected routes
+ *
+ * Note: With Convex Auth (OAuth only), we cannot programmatically log in users
+ * without mocking OAuth providers. These fixtures are kept for future use
+ * when OAuth mocking is implemented.
+ *
+ * For now, tests focus on unauthenticated behavior (redirects, etc.)
  */
 
 import { test as base, expect, Page } from "@playwright/test";
 
-// Test user credentials (should match seeded test user)
+// Test user credentials (for future OAuth mocking)
 export const TEST_USER = {
   email: "test@example.com",
-  password: "TestPassword123!",
   name: "Test User",
 };
 
 export const TEST_ADMIN = {
-  email: "admin@example.com", 
-  password: "AdminPassword123!",
+  email: "admin@example.com",
   name: "Admin User",
 };
 
 /**
- * Login helper function
+ * Check if user is authenticated by looking for auth indicators
  */
-export async function loginAs(
-  page: Page, 
-  email: string, 
-  password: string
-): Promise<boolean> {
-  await page.goto("/login");
-  
-  // Wait for form to be ready
-  await page.getByLabel(/email/i).waitFor({ state: "visible", timeout: 10000 });
-  
-  // Fill credentials
-  await page.getByLabel(/email/i).fill(email);
-  await page.getByLabel(/password/i).fill(password);
-  
-  // Submit form
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  
-  // Wait for navigation away from login
-  try {
-    await page.waitForURL((url) => !url.pathname.includes("/login"), { timeout: 15000 });
-  } catch {
-    return false;
-  }
-  
-  // Verify we're logged in (not on login page)
-  const url = page.url();
-  return !url.includes("/login");
-}
-
-/**
- * Logout helper function
- */
-export async function logout(page: Page): Promise<void> {
-  // Look for user menu or logout button
+export async function isAuthenticated(page: Page): Promise<boolean> {
+  // Look for common authenticated state indicators
   const userMenu = page.locator('[data-testid="user-menu"]').or(
-    page.getByRole("button", { name: /account|profile|user/i })
+    page.getByRole("button", { name: /account|profile|user|sign out/i })
   );
-  
-  if (await userMenu.isVisible()) {
-    await userMenu.click();
-    await page.getByRole("menuitem", { name: /sign out|logout/i }).click();
-  } else {
-    // Try direct logout link
-    const logoutLink = page.getByRole("link", { name: /sign out|logout/i });
-    if (await logoutLink.isVisible()) {
-      await logoutLink.click();
-    }
-  }
-  
-  // Wait for redirect to login or home or auth error
-  await expect(page).toHaveURL(/\/login|\/api\/auth|\/$/);
+
+  return await userMenu.isVisible({ timeout: 5000 }).catch(() => false);
 }
 
 /**
- * Extended test with authenticated contexts
- * 
- * Note: Playwright fixture API uses a callback named 'use' which conflicts
- * with React hooks linting. This is expected Playwright pattern.
+ * Navigate to login page
+ */
+export async function goToLogin(page: Page): Promise<void> {
+  await page.goto("/login", { waitUntil: "domcontentloaded", timeout: 30000 });
+  await page.waitForTimeout(1000);
+}
+
+/**
+ * Extended test with authentication helpers
+ *
+ * Note: authenticatedPage and adminPage fixtures require OAuth mocking
+ * to be implemented. For now, they are placeholders.
  */
 export const test = base.extend<{
   authenticatedPage: Page;
   adminPage: Page;
 }>({
-  authenticatedPage: async ({ page }, run) => {
-    const success = await loginAs(page, TEST_USER.email, TEST_USER.password);
-    if (!success) {
-      console.warn("Could not authenticate test user - tests may fail");
-    }
-    await run(page);
+  // Placeholder - requires OAuth mocking
+  authenticatedPage: async ({ page }, use) => {
+    // Without OAuth mocking, we can't authenticate
+    // Tests using this fixture should check isAuthenticated() and skip if false
+    console.warn("authenticatedPage fixture: OAuth mocking not implemented, using unauthenticated page");
+    await use(page);
   },
-  
-  adminPage: async ({ browser }, run) => {
+
+  // Placeholder - requires OAuth mocking
+  adminPage: async ({ browser }, use) => {
     const context = await browser.newContext();
     const page = await context.newPage();
-    const success = await loginAs(page, TEST_ADMIN.email, TEST_ADMIN.password);
-    if (!success) {
-      console.warn("Could not authenticate admin user - tests may fail");
-    }
-    await run(page);
+    console.warn("adminPage fixture: OAuth mocking not implemented, using unauthenticated page");
+    await use(page);
     await context.close();
   },
 });

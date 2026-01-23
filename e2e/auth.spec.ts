@@ -1,195 +1,95 @@
 /**
- * Authentication E2E Tests - Golden Paths
- * 
- * Tests the complete authentication flow including:
- * - Login form validation
- * - Successful login/logout
- * - Protected route redirection
- * - Session persistence
+ * Authentication E2E Tests - OAuth Flow
+ *
+ * Tests the Convex Auth OAuth authentication flow.
+ *
+ * IMPORTANT: These tests require the Convex backend to be running.
+ * - Start Convex with: npm run dev:convex
+ * - Or run full dev: npm run dev
+ *
+ * Without Convex, middleware redirects may not work correctly.
  */
 
 import { test, expect } from "@playwright/test";
-import { loginAs, logout, TEST_USER } from "./fixtures/auth";
 
 test.describe("Authentication", () => {
   test.describe("Login Page", () => {
-    test("should display login form with all elements", async ({ page }) => {
-      await page.goto("/login");
+    test("should display sign in heading", async ({ page }) => {
+      await page.goto("/login", { waitUntil: "domcontentloaded", timeout: 30000 });
+      await page.waitForTimeout(1000);
 
       // Check page title
-      await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible();
-
-      // Check form elements
-      await expect(page.getByLabel(/email/i)).toBeVisible();
-      await expect(page.getByLabel(/password/i)).toBeVisible();
-      await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
-      
-      // Check links
-      await expect(page.getByRole("link", { name: "Sign up", exact: true })).toBeVisible();
-      await expect(page.getByRole("link", { name: /forgot password/i })).toBeVisible();
+      await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible({ timeout: 15000 });
     });
 
-    test("should show validation errors for empty form", async ({ page }) => {
-      await page.goto("/login");
-      await page.getByRole("button", { name: "Sign in", exact: true }).waitFor({ state: "visible" });
-
-      // Submit empty form - HTML5 validation should prevent submission
-      await page.getByRole("button", { name: "Sign in", exact: true }).click();
-
-      // Should still be on login page (form didn't submit)
-      await expect(page).toHaveURL(/\/login/);
-    });
-
-    test("should show error for invalid credentials", async ({ page }) => {
-      await page.goto("/login");
-      await page.getByLabel(/email/i).waitFor({ state: "visible" });
-
-      // Fill in invalid credentials
-      await page.getByLabel(/email/i).fill("nonexistent@example.com");
-      await page.getByLabel(/password/i).fill("wrongpassword123");
-
-      // Submit form
-      await page.getByRole("button", { name: "Sign in", exact: true }).click();
-
-      // Wait a moment for response
+    test("should display sign in page content", async ({ page }) => {
+      await page.goto("/login", { waitUntil: "domcontentloaded", timeout: 30000 });
       await page.waitForTimeout(2000);
-      
-      // Should be on login page or error page (both are valid auth error states)
-      await expect(page).toHaveURL(/\/login|\/api\/auth\/error/);
+
+      // Should see the sign in heading
+      const heading = page.getByRole("heading", { name: /sign in/i });
+      await expect(heading).toBeVisible({ timeout: 10000 });
+
+      // Should see description text about providers or choosing
+      const description = page.getByText(/choose|provider|sign in/i);
+      await expect(description.first()).toBeVisible({ timeout: 5000 });
     });
 
-    test("should navigate to register page", async ({ page }) => {
-      await page.goto("/login");
-      const signUpLink = page.getByRole("link", { name: "Sign up" });
-      await signUpLink.waitFor({ state: "visible" });
+    test("login page card should be visible", async ({ page }) => {
+      await page.goto("/login", { waitUntil: "domcontentloaded", timeout: 30000 });
+      await page.waitForTimeout(2000);
 
-      // Force navigation via href (Next.js Link can be unreliable in tests)
-      const href = await signUpLink.getAttribute("href");
-      if (href) {
-        await page.goto(href);
-      } else {
-        await signUpLink.click();
-      }
-      await expect(page).toHaveURL("/register", { timeout: 10000 });
-    });
+      // The login card should be visible
+      const card = page.locator('[class*="card"], [class*="Card"]').first();
+      const hasCard = await card.isVisible({ timeout: 5000 }).catch(() => false);
 
-    test("should navigate to forgot password page", async ({ page }) => {
-      await page.goto("/login");
-      const forgotLink = page.getByRole("link", { name: /forgot password/i });
-      await forgotLink.waitFor({ state: "visible" });
+      // Or at minimum the heading should be visible
+      const hasHeading = await page.getByRole("heading", { name: /sign in/i })
+        .isVisible({ timeout: 5000 })
+        .catch(() => false);
 
-      const href = await forgotLink.getAttribute("href");
-      if (href) {
-        await page.goto(href);
-      } else {
-        await forgotLink.click();
-      }
-      await expect(page).toHaveURL("/forgot-password", { timeout: 10000 });
+      expect(hasCard || hasHeading).toBe(true);
     });
   });
 
-  test.describe("Registration Page", () => {
-    test("should display registration form", async ({ page }) => {
-      await page.goto("/register");
+  test.describe("Protected Routes", () => {
+    // Note: These tests require Convex backend to be running for middleware redirects
 
-      // Check page title
-      await expect(page.getByRole("heading", { name: /create an account/i })).toBeVisible();
+    test("unauthenticated access to /dashboard redirects or shows login", async ({ page }) => {
+      await page.goto("/dashboard", { waitUntil: "domcontentloaded", timeout: 30000 });
+      await page.waitForTimeout(3000);
 
-      // Check form elements
-      await expect(page.getByLabel(/name/i)).toBeVisible();
-      await expect(page.getByLabel(/email/i)).toBeVisible();
-      await expect(page.getByLabel(/^password$/i)).toBeVisible();
-      await expect(page.getByLabel(/confirm password/i)).toBeVisible();
-      // Use exact match for submit button
-      await expect(page.getByRole("button", { name: "Create account" })).toBeVisible();
-    });
+      // Either:
+      // 1. Redirected to /login (Convex Auth working)
+      // 2. Shows login content (client-side redirect)
+      // 3. Shows error/loading (Convex not connected)
+      const url = page.url();
+      const onLogin = url.includes("/login");
+      const hasLoginContent = await page.getByRole("heading", { name: /sign in/i })
+        .isVisible({ timeout: 5000 })
+        .catch(() => false);
 
-    test("should navigate to login page", async ({ page }) => {
-      await page.goto("/register");
-      const loginLink = page.locator('a[href="/login"]');
-      await loginLink.waitFor({ state: "visible" });
-
-      const href = await loginLink.getAttribute("href");
-      if (href) {
-        await page.goto(href);
-      } else {
-        await loginLink.click();
-      }
-      await expect(page).toHaveURL("/login", { timeout: 10000 });
+      // Test passes if we're on login page OR see login content
+      expect(onLogin || hasLoginContent).toBe(true);
     });
   });
 
-  test.describe("Forgot Password Page", () => {
-    test("should display forgot password form", async ({ page }) => {
-      await page.goto("/forgot-password");
+  test.describe("Public Routes", () => {
+    test("login page loads without error", async ({ page }) => {
+      await page.goto("/login", { waitUntil: "domcontentloaded", timeout: 30000 });
 
-      // Check page title
-      await expect(page.getByRole("heading", { name: /reset password/i })).toBeVisible();
+      // Should stay on login page
+      await expect(page).toHaveURL(/\/login/);
 
-      // Check form elements
-      await expect(page.getByLabel(/email/i)).toBeVisible();
-      await expect(page.getByRole("button", { name: /send reset link/i })).toBeVisible();
+      // Body should be visible (page loaded)
+      await expect(page.locator("body")).toBeVisible();
     });
 
-    test("should have link back to login", async ({ page }) => {
-      await page.goto("/forgot-password");
-      // Use exact match for the card link (not header)
-      const signInLink = page.getByRole("link", { name: "Sign in", exact: true });
-      await signInLink.waitFor({ state: "visible" });
+    test("home page loads without error", async ({ page }) => {
+      await page.goto("/", { waitUntil: "domcontentloaded", timeout: 30000 });
 
-      const href = await signInLink.getAttribute("href");
-      if (href) {
-        await page.goto(href);
-      } else {
-        await signInLink.click();
-      }
-      await expect(page).toHaveURL("/login", { timeout: 10000 });
-    });
-  });
-
-  test.describe("Login/Logout Flow", () => {
-    test("successful login redirects to dashboard", async ({ page }) => {
-      const success = await loginAs(page, TEST_USER.email, TEST_USER.password);
-      
-      if (success) {
-        // Should be redirected to dashboard or home
-        await expect(page).not.toHaveURL(/\/login/);
-        
-        // User name or dashboard element should be visible
-        await expect(
-          page.getByText(TEST_USER.name).or(page.getByText(/dashboard/i))
-        ).toBeVisible({ timeout: 5000 }).catch(() => {
-          // May not show user name, just verify not on login
-        });
-      } else {
-        // Skip test if auth fails (test user may not exist)
-        test.skip();
-      }
-    });
-
-    test("logout returns to login page", async ({ page }) => {
-      const success = await loginAs(page, TEST_USER.email, TEST_USER.password);
-      
-      if (success) {
-        await logout(page);
-        await expect(page).toHaveURL(/\/login|\/$/);
-      } else {
-        test.skip();
-      }
-    });
-
-    test("session persists across page navigation", async ({ page }) => {
-      const success = await loginAs(page, TEST_USER.email, TEST_USER.password);
-      
-      if (success) {
-        // Navigate to another page
-        await page.goto("/dashboard");
-        
-        // Should not be redirected to login
-        await expect(page).not.toHaveURL(/\/login/);
-      } else {
-        test.skip();
-      }
+      // Body should be visible (page loaded)
+      await expect(page.locator("body")).toBeVisible();
     });
   });
 });

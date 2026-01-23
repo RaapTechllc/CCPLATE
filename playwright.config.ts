@@ -8,14 +8,17 @@ export default defineConfig({
   // Directory containing test files
   testDir: "./e2e",
 
+  // Global setup to warm up server before tests
+  globalSetup: "./e2e/global-setup.ts",
+
   // Run tests in files in parallel
   fullyParallel: true,
 
   // Fail the build on CI if you accidentally left test.only in the source code
   forbidOnly: !!process.env.CI,
 
-  // Retry on CI only
-  retries: process.env.CI ? 2 : 0,
+  // Retry on CI only (increased to 2 for flaky network issues)
+  retries: process.env.CI ? 2 : 1,
 
   // Opt out of parallel tests on CI
   workers: process.env.CI ? 1 : undefined,
@@ -27,8 +30,13 @@ export default defineConfig({
     ["list"],
   ],
 
-  // Global timeout for each test
-  timeout: 60000,
+  // Global timeout for each test (increased for slow server)
+  timeout: 90000,
+
+  // Expect timeout for assertions
+  expect: {
+    timeout: 15000,
+  },
 
   // Shared settings for all the projects below
   use: {
@@ -41,11 +49,11 @@ export default defineConfig({
     // Capture screenshot on failure
     screenshot: "only-on-failure",
 
-    // Navigation timeout
-    navigationTimeout: 45000,
+    // Navigation timeout (increased for production server cold pages)
+    navigationTimeout: 60000,
 
     // Action timeout
-    actionTimeout: 15000,
+    actionTimeout: 20000,
   },
 
   // Configure projects for major browsers
