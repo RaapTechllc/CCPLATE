@@ -1,15 +1,19 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
 /**
  * Test Guardian worktree functionality
- * 
+ *
  * Usage:
- *   bun run e2e/guardian-tests/scripts/test-worktrees.ts
+ *   node --experimental-strip-types e2e/guardian-tests/scripts/test-worktrees.ts
+ *
+ * Requirements:
+ *   - tsx (npm install -D tsx) OR bun installed
+ *   - Node.js in system PATH for npm scripts
  */
 
 import { existsSync, rmSync, readFileSync } from "fs";
 import { join } from "path";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 
 const PROJECT_DIR = process.cwd();
 const WORKTREES_DIR = join(PROJECT_DIR, ".worktrees");
@@ -21,9 +25,41 @@ interface TestResult {
   details: string;
 }
 
-function runCLI(args: string): { stdout: string; stderr: string; exitCode: number } {
+// Detect available TypeScript runtime
+function detectRuntime(): { cmd: string; available: boolean } {
+  // Try tsx first (best compatibility)
   try {
-    const stdout = execSync(`bun run ${CLI_PATH} ${args}`, {
+    execSync("npx tsx --version", { stdio: "ignore", cwd: PROJECT_DIR });
+    return { cmd: "npx tsx", available: true };
+  } catch {
+    // tsx not available
+  }
+
+  // Try bun
+  try {
+    execSync("bun --version", { stdio: "ignore" });
+    return { cmd: "bun run", available: true };
+  } catch {
+    // bun not available
+  }
+
+  return { cmd: "", available: false };
+}
+
+const runtime = detectRuntime();
+
+function runCLI(args: string): { stdout: string; stderr: string; exitCode: number } {
+  if (!runtime.available) {
+    return {
+      stdout: "",
+      stderr: "No TypeScript runtime available. Install tsx (npm install -D tsx) or bun.",
+      exitCode: 1,
+    };
+  }
+
+  try {
+    const cmd = `${runtime.cmd} "${CLI_PATH}" ${args}`;
+    const stdout = execSync(cmd, {
       cwd: PROJECT_DIR,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
@@ -295,6 +331,19 @@ function printResults(results: TestResult[]): void {
 // ============== MAIN ==============
 
 console.log("🔧 Running worktree tests...\n");
+
+// Check for TypeScript runtime
+if (!runtime.available) {
+  console.log("⚠️  No TypeScript runtime detected!\n");
+  console.log("These tests require tsx or bun to run the ccplate CLI.\n");
+  console.log("To fix, install one of:");
+  console.log("  - tsx: npm install -D tsx");
+  console.log("  - bun: https://bun.sh/\n");
+  console.log("Then ensure 'node' is in your system PATH.\n");
+  process.exit(1);
+}
+
+console.log(`Using runtime: ${runtime.cmd}\n`);
 
 const results: TestResult[] = [
   testWorktreeCreate(),

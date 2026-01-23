@@ -1,10 +1,10 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
 /**
  * Verify Guardian nudge generation
- * 
+ *
  * Usage:
- *   bun run e2e/guardian-tests/scripts/verify-nudges.ts [type]
+ *   node --experimental-strip-types e2e/guardian-tests/scripts/verify-nudges.ts [type]
  * 
  * Types:
  *   commit   - Verify commit nudge

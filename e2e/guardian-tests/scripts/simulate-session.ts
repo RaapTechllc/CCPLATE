@@ -1,10 +1,10 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
 /**
  * Simulate Guardian sessions for testing
- * 
+ *
  * Usage:
- *   bun run e2e/guardian-tests/scripts/simulate-session.ts <scenario>
+ *   node --experimental-strip-types e2e/guardian-tests/scripts/simulate-session.ts <scenario>
  * 
  * Scenarios:
  *   commit-nudge   - Simulate conditions for commit nudge
@@ -241,7 +241,7 @@ Guardian Session Simulator
 ==========================
 
 Usage:
-  bun run e2e/guardian-tests/scripts/simulate-session.ts <scenario>
+  node --experimental-strip-types e2e/guardian-tests/scripts/simulate-session.ts <scenario>
 
 Scenarios:
   commit-nudge    Set up conditions for commit nudge (6 files, 20min since commit)
@@ -251,8 +251,8 @@ Scenarios:
   full-session    Simulate a complete development session
 
 Examples:
-  bun run e2e/guardian-tests/scripts/simulate-session.ts commit-nudge
-  bun run e2e/guardian-tests/scripts/simulate-session.ts full-session
+  npm run test:guardian:simulate commit-nudge
+  npm run test:guardian:simulate full-session
 `);
 }
 
