@@ -203,6 +203,14 @@
   - [x] Agents defined (3)
   - [x] AI Builders (6)
 
+- [x] **Add setup/bootstrap script for new users** (2026-01-23)
+  - [x] Created `scripts/setup.js` - checks dependencies and PATH config
+  - [x] Added `npm run setup` command
+  - [x] Added Prerequisites section to CLAUDE.md
+  - [x] Added Quick Start guide to CLAUDE.md
+  - [x] Updated Guardian tests to use Node.js (no bun dependency)
+  - [x] Windows PATH troubleshooting instructions
+
 ---
 
 ## Completed ✅

@@ -2,6 +2,63 @@
 
 > Next.js + TypeScript web application with PostgreSQL database and Guardian control plane.
 
+## Prerequisites
+
+Before using CCPLATE, ensure you have the following installed:
+
+### Required
+
+| Dependency | Version | Installation |
+|------------|---------|--------------|
+| **Node.js** | 18+ (24+ recommended) | [nodejs.org](https://nodejs.org/) |
+| **npm** | 9+ | Included with Node.js |
+| **Git** | 2.30+ | [git-scm.com](https://git-scm.com/) |
+
+### Optional (Recommended)
+
+| Dependency | Purpose | Installation |
+|------------|---------|--------------|
+| **PostgreSQL** | Database | [postgresql.org](https://www.postgresql.org/download/) |
+| **Bun** | Faster CLI runtime | `npm install -g bun` or [bun.sh](https://bun.sh/) |
+
+### Windows PATH Configuration
+
+**Important:** On Windows, ensure Node.js is in your system PATH. npm scripts will fail otherwise.
+
+To verify, open a **new** Command Prompt and run:
+```cmd
+node --version
+```
+
+If this fails, add Node.js to your PATH:
+1. Open **System Properties** > **Environment Variables**
+2. Under "System variables", edit **Path**
+3. Add: `C:\Program Files\nodejs`
+4. Restart your terminal/IDE
+
+Or run in PowerShell (as Administrator):
+```powershell
+[Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\Program Files\nodejs", "Machine")
+```
+
+## Quick Start
+
+```bash
+# 1. Clone the repository
+git clone <repo-url> my-project
+cd my-project
+
+# 2. Run setup (checks dependencies and installs packages)
+node scripts/setup.js
+
+# 3. Configure environment
+cp .env.example .env.local
+# Edit .env.local with your values
+
+# 4. Start development
+npm run dev
+```
+
 ## Bootstrap Instructions
 
 This is a bootstrapped Claude Code project. On first run:
@@ -14,10 +71,11 @@ This is a bootstrapped Claude Code project. On first run:
 
 ## Commands
 
+- **Setup:** `npm run setup` (or `node scripts/setup.js`)
+- **Dev:** `npm run dev`
 - **Build:** `npm run build`
 - **Test:** `npm test`
 - **Lint:** `npm run lint`
-- **Dev:** `npm run dev`
 - **Deploy:** `vercel` (or platform of choice)
 
 ### Database Commands
@@ -234,6 +292,7 @@ If the same error occurs 3 times:
 
 > Claude: Add discovered issues here as you encounter them.
 
+- **Windows PATH Required:** Node.js must be in your system PATH for npm scripts to work. Run `node scripts/setup.js` to check.
 - **E2E Test Timeouts:** Production server can be slow (~6s per page) causing Playwright timeouts. Consider using dev server for tests or increasing timeout values.
 - **Prisma Patches Available:** Non-breaking patches available for Prisma. Safe to update when convenient.
 - **GitHub Webhook Partial:** The GitHub webhook parses @guardian commands but doesn't yet enqueue jobs. Documented as backlog item.
