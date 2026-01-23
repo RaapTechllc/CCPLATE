@@ -1,32 +1,35 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { signIn } from "next-auth/react"
-import { useSearchParams } from "next/navigation"
+import { useState } from "react";
+import { useAuthActions } from "@convex-dev/auth/react";
+import { useSearchParams } from "next/navigation";
 
-type OAuthProvider = "google" | "github"
+type OAuthProvider = "google" | "github";
 
 interface OAuthButtonsProps {
-  mode?: "signin" | "signup"
+  mode?: "signin" | "signup";
 }
 
 export function OAuthButtons({ mode = "signin" }: OAuthButtonsProps) {
-  const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard"
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+  const { signIn } = useAuthActions();
 
-  const [loadingProvider, setLoadingProvider] = useState<OAuthProvider | null>(null)
+  const [loadingProvider, setLoadingProvider] = useState<OAuthProvider | null>(
+    null
+  );
 
   const handleOAuthSignIn = async (provider: OAuthProvider) => {
-    setLoadingProvider(provider)
+    setLoadingProvider(provider);
     try {
-      await signIn(provider, { callbackUrl })
+      await signIn(provider, { redirectTo: callbackUrl });
     } catch {
-      // Error handling is managed by NextAuth
-      setLoadingProvider(null)
+      // Error handling
+      setLoadingProvider(null);
     }
-  }
+  };
 
-  const actionText = mode === "signup" ? "Sign up" : "Sign in"
+  const actionText = mode === "signup" ? "Sign up" : "Sign in";
 
   return (
     <div className="space-y-3">
@@ -77,7 +80,9 @@ export function OAuthButtons({ mode = "signin" }: OAuthButtonsProps) {
             />
           </svg>
         )}
-        {loadingProvider === "google" ? "Connecting..." : `${actionText} with Google`}
+        {loadingProvider === "google"
+          ? "Connecting..."
+          : `${actionText} with Google`}
       </button>
 
       <button
@@ -116,8 +121,10 @@ export function OAuthButtons({ mode = "signin" }: OAuthButtonsProps) {
             />
           </svg>
         )}
-        {loadingProvider === "github" ? "Connecting..." : `${actionText} with GitHub`}
+        {loadingProvider === "github"
+          ? "Connecting..."
+          : `${actionText} with GitHub`}
       </button>
     </div>
-  )
+  );
 }

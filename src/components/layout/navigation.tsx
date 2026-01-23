@@ -1,21 +1,21 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { useSession } from "next-auth/react"
-import { cn } from "@/lib/utils"
+import { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useConvexAuth } from "convex/react";
+import { cn } from "@/lib/utils";
 
 interface NavLinkProps {
-  href: string
-  children: React.ReactNode
-  className?: string
-  onClick?: () => void
+  href: string;
+  children: React.ReactNode;
+  className?: string;
+  onClick?: () => void;
 }
 
 function NavLink({ href, children, className, onClick }: NavLinkProps) {
-  const pathname = usePathname()
-  const isActive = pathname === href || pathname.startsWith(href + "/")
+  const pathname = usePathname();
+  const isActive = pathname === href || pathname.startsWith(href + "/");
 
   return (
     <Link
@@ -31,7 +31,7 @@ function NavLink({ href, children, className, onClick }: NavLinkProps) {
     >
       {children}
     </Link>
-  )
+  );
 }
 
 const mainLinks = [
@@ -39,7 +39,7 @@ const mainLinks = [
   { href: "/files", label: "Files" },
   { href: "/guardian", label: "Guardian" },
   { href: "/profile", label: "Profile" },
-]
+];
 
 const builderLinks = [
   { href: "/hook-builder", label: "Hook Builder" },
@@ -48,25 +48,25 @@ const builderLinks = [
   { href: "/schema-builder", label: "Schema Builder" },
   { href: "/api-builder", label: "API Builder" },
   { href: "/component-builder", label: "Component Builder" },
-]
+];
 
 interface NavigationProps {
-  className?: string
-  orientation?: "horizontal" | "vertical"
-  onLinkClick?: () => void
+  className?: string;
+  orientation?: "horizontal" | "vertical";
+  onLinkClick?: () => void;
 }
 
 export function Navigation({
   className,
   orientation = "horizontal",
-  onLinkClick
+  onLinkClick,
 }: NavigationProps) {
-  const { data: session } = useSession()
-  const [buildersOpen, setBuildersOpen] = useState(false)
-  const pathname = usePathname()
+  const { isAuthenticated } = useConvexAuth();
+  const [buildersOpen, setBuildersOpen] = useState(false);
+  const pathname = usePathname();
   const isBuilderActive = builderLinks.some(
     (link) => pathname === link.href || pathname.startsWith(link.href + "/")
-  )
+  );
 
   if (orientation === "vertical") {
     return (
@@ -74,7 +74,7 @@ export function Navigation({
         <NavLink href="/" onClick={onLinkClick}>
           Home
         </NavLink>
-        {session && (
+        {isAuthenticated && (
           <>
             {mainLinks.map((link) => (
               <NavLink key={link.href} href={link.href} onClick={onLinkClick}>
@@ -93,7 +93,7 @@ export function Navigation({
           </>
         )}
       </nav>
-    )
+    );
   }
 
   return (
@@ -101,7 +101,7 @@ export function Navigation({
       <NavLink href="/" onClick={onLinkClick}>
         Home
       </NavLink>
-      {session && (
+      {isAuthenticated && (
         <>
           {mainLinks.map((link) => (
             <NavLink key={link.href} href={link.href} onClick={onLinkClick}>
@@ -148,12 +148,13 @@ export function Navigation({
                       key={link.href}
                       href={link.href}
                       onClick={() => {
-                        setBuildersOpen(false)
-                        onLinkClick?.()
+                        setBuildersOpen(false);
+                        onLinkClick?.();
                       }}
                       className={cn(
                         "block px-4 py-2 text-sm transition-colors",
-                        pathname === link.href || pathname.startsWith(link.href + "/")
+                        pathname === link.href ||
+                          pathname.startsWith(link.href + "/")
                           ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
                           : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                       )}
@@ -168,5 +169,5 @@ export function Navigation({
         </>
       )}
     </nav>
-  )
+  );
 }

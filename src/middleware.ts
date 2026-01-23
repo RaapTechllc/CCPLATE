@@ -1,156 +1,71 @@
-import { NextResponse } from "next/server"
-import { getToken } from "next-auth/jwt"
-import type { NextRequest } from "next/server"
+import {
+  convexAuthNextjsMiddleware,
+  createRouteMatcher,
+  nextjsMiddlewareRedirect,
+} from "@convex-dev/auth/nextjs/server";
 
 // Routes that require authentication
-const protectedRoutes = [
-  "/dashboard",
-  "/files",
-  "/prompt-builder",
-  "/schema-builder",
-  "/agent-builder",
-  "/api-builder",
-  "/component-builder",
-  "/hook-builder",
-  "/guardian",
-  "/profile",
-  "/settings",
-]
+const isProtectedRoute = createRouteMatcher([
+  "/dashboard(.*)",
+  "/files(.*)",
+  "/prompt-builder(.*)",
+  "/schema-builder(.*)",
+  "/agent-builder(.*)",
+  "/api-builder(.*)",
+  "/component-builder(.*)",
+  "/hook-builder(.*)",
+  "/guardian(.*)",
+  "/profile(.*)",
+  "/settings(.*)",
+]);
 
-// API routes that require authentication (except public endpoints)
-const protectedApiRoutes = [
-  "/api/users",
-]
+// Admin routes
+const isAdminRoute = createRouteMatcher([
+  "/admin(.*)",
+]);
 
-// Routes that require admin role
-const adminRoutes = [
-  "/admin",
-  "/api/admin",
-]
+// Public routes that don't require authentication
+const isPublicRoute = createRouteMatcher([
+  "/",
+  "/login",
+  "/api/auth/(.*)",
+]);
 
-// Public API endpoints that don't require authentication
-const publicApiEndpoints = [
-  "/api/users/register",
-  "/api/users/verify-email",
-]
+export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
+  const { pathname } = request.nextUrl;
 
-function isProtectedRoute(pathname: string): boolean {
-  return protectedRoutes.some((route) =>
-    pathname === route || pathname.startsWith(`${route}/`)
-  )
-}
+  // Check authentication status
+  const isAuthenticated = await convexAuth.isAuthenticated();
 
-function isProtectedApiRoute(pathname: string): boolean {
-  // Check if it's a protected API route
-  const isProtectedApi = protectedApiRoutes.some((route) =>
-    pathname === route || pathname.startsWith(`${route}/`)
-  )
-
-  // Exclude public endpoints
-  const isPublicEndpoint = publicApiEndpoints.some((endpoint) =>
-    pathname === endpoint || pathname.startsWith(`${endpoint}/`)
-  )
-
-  return isProtectedApi && !isPublicEndpoint
-}
-
-function isAdminRoute(pathname: string): boolean {
-  return adminRoutes.some((route) =>
-    pathname === route || pathname.startsWith(`${route}/`)
-  )
-}
-
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl
-
-  // Get the token from the request
-  const token = await getToken({
-    req: request,
-    secret: process.env.NEXTAUTH_SECRET,
-  })
-
-  // Check if accessing admin routes
-  if (isAdminRoute(pathname)) {
-    // No token - redirect to login
-    if (!token) {
-      const loginUrl = new URL("/login", request.url)
-      loginUrl.searchParams.set("callbackUrl", pathname)
-      return NextResponse.redirect(loginUrl)
+  // Handle admin routes
+  if (isAdminRoute(request)) {
+    if (!isAuthenticated) {
+      return nextjsMiddlewareRedirect(request, "/login");
     }
-
-    // Token exists but user is not admin
-    if (token.role !== "ADMIN") {
-      // For API routes, return 403 Forbidden
-      if (pathname.startsWith("/api/")) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: {
-              code: "FORBIDDEN",
-              message: "Forbidden: Admin access required",
-            },
-          },
-          { status: 403 }
-        )
-      }
-
-      // For page routes, redirect to dashboard
-      return NextResponse.redirect(new URL("/dashboard", request.url))
-    }
-
-    // Admin user - allow access
-    return NextResponse.next()
+    // Note: Admin role check should be done at the Convex query/mutation level
+    // Middleware can only check authentication, not authorization
   }
 
-  // Check if accessing protected routes
-  if (isProtectedRoute(pathname) || isProtectedApiRoute(pathname)) {
-    if (!token) {
-      // For API routes, return 401 Unauthorized
-      if (pathname.startsWith("/api/")) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: {
-              code: "UNAUTHORIZED",
-              message: "Unauthorized: Authentication required",
-            },
-          },
-          { status: 401 }
-        )
-      }
-
-      // For page routes, redirect to login with callback URL
-      const loginUrl = new URL("/login", request.url)
-      loginUrl.searchParams.set("callbackUrl", pathname)
-      return NextResponse.redirect(loginUrl)
+  // Handle protected routes
+  if (isProtectedRoute(request)) {
+    if (!isAuthenticated) {
+      const loginUrl = new URL("/login", request.url);
+      loginUrl.searchParams.set("callbackUrl", pathname);
+      return nextjsMiddlewareRedirect(request, loginUrl.toString());
     }
-
-    // Token exists - allow access
-    return NextResponse.next()
   }
 
-  // All other routes - pass through
-  return NextResponse.next()
-}
+  // Redirect authenticated users away from login page
+  if (isAuthenticated && pathname === "/login") {
+    return nextjsMiddlewareRedirect(request, "/dashboard");
+  }
+});
 
 export const config = {
   matcher: [
-    // Protected page routes
-    "/dashboard/:path*",
-    "/files/:path*",
-    "/prompt-builder/:path*",
-    "/schema-builder/:path*",
-    "/agent-builder/:path*",
-    "/api-builder/:path*",
-    "/component-builder/:path*",
-    "/hook-builder/:path*",
-    "/guardian/:path*",
-    "/profile/:path*",
-    "/settings/:path*",
-    // Admin routes
-    "/admin/:path*",
-    // Protected API routes
-    "/api/users/:path*",
-    "/api/admin/:path*",
+    // Skip internal Next.js paths and static files
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    // Always run for API routes
+    "/(api|trpc)(.*)",
   ],
-}
+};

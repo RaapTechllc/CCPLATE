@@ -1,26 +1,17 @@
-import { PrismaClient } from "@/generated/prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { Pool } from "pg";
+// This file has been deprecated.
+// Database access is now handled through Convex.
+//
+// To query data in client components:
+//   import { useQuery } from "convex/react";
+//   import { api } from "../../convex/_generated/api";
+//   const data = useQuery(api.users.getCurrentUser);
+//
+// To mutate data in client components:
+//   import { useMutation } from "convex/react";
+//   import { api } from "../../convex/_generated/api";
+//   const updateProfile = useMutation(api.users.updateProfile);
+//
+// For server-side queries, use Convex HTTP actions or
+// the preloadQuery pattern with ConvexHttpClient.
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-  pool: Pool | undefined;
-};
-
-function createPrismaClient() {
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-  });
-
-  const adapter = new PrismaPg(pool);
-
-  return new PrismaClient({ adapter });
-}
-
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
-
-export default prisma;
+export {};
