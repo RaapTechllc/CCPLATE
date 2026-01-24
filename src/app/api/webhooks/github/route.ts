@@ -56,7 +56,11 @@ function verifySignature(
   signature: string,
   secret: string
 ): boolean {
-  if (!secret) return true; // Skip verification if no secret configured
+  // REQUIRE a secret to be configured for security
+  if (!secret) {
+    log.error("GITHUB_WEBHOOK_SECRET is not configured");
+    return false;
+  }
 
   try {
     const hmac = crypto.createHmac("sha256", secret);
@@ -203,9 +207,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Empty payload" }, { status: 400 });
     }
 
-    // Verify signature if secret is configured
-    const secret = process.env.GITHUB_WEBHOOK_SECRET || "";
-    if (secret && !verifySignature(payload, signature, secret)) {
+    // Verify signature - REQUIRE GITHUB_WEBHOOK_SECRET to be set
+    const secret = process.env.GITHUB_WEBHOOK_SECRET;
+    if (!secret) {
+      log.error("GITHUB_WEBHOOK_SECRET is not configured");
+      return NextResponse.json(
+        { error: "Webhook secret not configured on server" },
+        { status: 500 }
+      );
+    }
+
+    if (!verifySignature(payload, signature, secret)) {
       log.warn("Invalid webhook signature", { event });
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
@@ -237,7 +249,13 @@ export async function POST(request: NextRequest) {
       const issue = data.issue as Record<string, unknown>;
       const commentBody = comment?.body as string;
       const commentId = comment?.id as number;
-      const issueNumber = issue?.number as number;
+      const issueNumber = Number(issue?.number);
+
+      if (isNaN(issueNumber)) {
+        log.warn("Invalid issue number received", { issueNumber: issue?.number });
+        return NextResponse.json({ error: "Invalid issue number" }, { status: 400 });
+      }
+
       const issueTitle = issue?.title as string;
       const issueBody = issue?.body as string;
       const author = (comment?.user as Record<string, unknown>)
@@ -316,7 +334,11 @@ export async function POST(request: NextRequest) {
     // Handle new issues (auto-triage)
     if (event === "issues" && (data.action === "opened" || data.action === "edited")) {
       const issue = data.issue as Record<string, unknown>;
-      const issueNumber = issue?.number as number;
+      const issueNumber = Number(issue?.number);
+
+      if (isNaN(issueNumber)) {
+        return NextResponse.json({ error: "Invalid issue number" }, { status: 400 });
+      }
       const issueTitle = issue?.title as string;
       const issueBody = issue?.body as string;
 
