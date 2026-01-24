@@ -61,6 +61,23 @@ import {
   formatAuditEntries,
   type AuditCategory,
 } from "../lib/guardian/audit-log";
+import {
+  analyzeIssue,
+  checkParallelSafety,
+  formatParallelCheckResult,
+  type IssueAnalysis,
+} from "../lib/guardian/labeling";
+import {
+  parseLogEntries,
+  formatLogEntries,
+  type LogLevel,
+} from "../lib/guardian/logger";
+import {
+  getConflictedFiles,
+  analyzeConflict,
+  resolveConflicts,
+  formatConflictAnalysis,
+} from "../lib/guardian/merge-resolver";
 
 const ROOT_DIR = resolve(import.meta.dir, "../..");
 const CONFIG_PATH = join(ROOT_DIR, "ccplate.config.json");
@@ -923,6 +940,18 @@ Usage:
   ccplate harness pick <variant-id>               Select variant to merge
   ccplate harness cleanup [run-id]                Remove non-selected worktrees
   ccplate harness report [run-id]                 Regenerate report
+  ccplate harness --parallel                      Run variants in parallel
+
+  ccplate triage <issue-number>                   Analyze issue and suggest labels
+  ccplate triage --all                            Triage all unlabeled issues
+  ccplate parallel-check <issue1> <issue2> ...    Check if issues can run in parallel
+
+  ccplate log [--namespace <ns>] [--level <lvl>]  View structured logs
+  ccplate log --since <minutes> --tail <n>        Filter logs by time and count
+
+  ccplate resolve status                          Show merge conflict status
+  ccplate resolve auto                            Auto-resolve simple conflicts
+  ccplate resolve analyze <file>                  Analyze conflict in file
 
   ccplate validate status                         Show Playwright validation status
   ccplate validate run [test-pattern]             Run Playwright tests
@@ -1337,6 +1366,8 @@ async function main(): Promise<void> {
     const maxMinutesIndex = args.indexOf('--max-minutes');
     const noPrdIndex = args.indexOf('--no-prd');
     const dryRunIndex = args.indexOf('--dry-run');
+    const parallelIndex = args.indexOf('--parallel');
+    const maxConcurrentIndex = args.indexOf('--max-concurrent');
 
     switch (subcommand) {
       case "status": {
@@ -1397,9 +1428,14 @@ async function main(): Promise<void> {
           process.exit(1);
         }
 
-        const maxMinutes = maxMinutesIndex !== -1 
-          ? parseInt(args[maxMinutesIndex + 1], 10) 
+        const maxMinutes = maxMinutesIndex !== -1
+          ? parseInt(args[maxMinutesIndex + 1], 10)
           : 30;
+
+        const parallel = parallelIndex !== -1;
+        const maxConcurrent = maxConcurrentIndex !== -1
+          ? parseInt(args[maxConcurrentIndex + 1], 10)
+          : 3;
 
         await startHarnessRun({
           rootDir: ROOT_DIR,
@@ -1407,6 +1443,8 @@ async function main(): Promise<void> {
           variants: names ? names.length : variantCount,
           names,
           maxMinutes,
+          parallel,
+          maxConcurrent,
           requirePRD: noPrdIndex === -1,
           dryRun: dryRunIndex !== -1,
         });
@@ -1729,10 +1767,10 @@ async function main(): Promise<void> {
         const limitIndex = args.indexOf("--limit");
         const categoryIndex = args.indexOf("--category");
         const sinceIndex = args.indexOf("--since");
-        
+
         const limit = limitIndex !== -1 ? parseInt(args[limitIndex + 1], 10) : 50;
         const category = categoryIndex !== -1 ? args[categoryIndex + 1] as AuditCategory : undefined;
-        
+
         let since: Date | undefined;
         if (sinceIndex !== -1 && args[sinceIndex + 1]) {
           const minutes = parseInt(args[sinceIndex + 1], 10);
@@ -1740,7 +1778,7 @@ async function main(): Promise<void> {
             since = new Date(Date.now() - minutes * 60 * 1000);
           }
         }
-        
+
         const entries = getAuditEntries(ROOT_DIR, { limit, category, since });
         console.log(formatAuditEntries(entries));
         break;
@@ -1767,6 +1805,159 @@ async function main(): Promise<void> {
       default:
         console.error(`Unknown audit command: ${subcommand}`);
         console.log("Usage: ccplate audit [list|categories]");
+        process.exit(1);
+    }
+  } else if (command === "triage") {
+    // Triage issues using the labeling system
+    if (subcommand === "--all" || args.includes("--all")) {
+      console.log("Triaging all unlabeled issues...");
+      console.log("Note: This requires GITHUB_TOKEN environment variable");
+      console.log("Implementation pending - use GitHub webhook for auto-triage");
+      process.exit(0);
+    }
+
+    const issueNumber = parseInt(subcommand, 10);
+    if (isNaN(issueNumber)) {
+      console.error("Error: Invalid issue number");
+      console.error("Usage: ccplate triage <issue-number>");
+      console.error("       ccplate triage --all");
+      process.exit(1);
+    }
+
+    console.log(`\n🔍 Triaging issue #${issueNumber}...\n`);
+
+    // For local triage, we need the issue title and body
+    // This is a simplified version - full implementation would fetch from GitHub
+    console.log("Note: For full triage, use the GitHub webhook integration.");
+    console.log("      Or provide issue content via stdin.\n");
+
+    // Demonstrate with placeholder
+    const analysis: IssueAnalysis = analyzeIssue(
+      issueNumber,
+      "Sample issue title",
+      "Sample issue body mentioning src/lib/guardian/worktree.ts"
+    );
+
+    console.log(`Issue #${issueNumber}:`);
+    console.log(`  Detected files: ${analysis.mentionedFiles.length > 0 ? analysis.mentionedFiles.join(", ") : "(none)"}`);
+    console.log(`  Suggested labels:`);
+    for (const label of analysis.suggestedLabels) {
+      console.log(`    - ${label}`);
+    }
+    console.log(`  Parallel safe: ${analysis.parallelSafe ? "Yes" : "No"}`);
+    console.log(`\nTo apply labels, use the GitHub webhook or gh CLI:`);
+    console.log(`  gh issue edit ${issueNumber} --add-label "${analysis.suggestedLabels.join(",")}"`);
+
+  } else if (command === "parallel-check") {
+    // Check if issues can run in parallel
+    const issueNumbers = args.slice(1).map(n => parseInt(n, 10)).filter(n => !isNaN(n));
+
+    if (issueNumbers.length < 2) {
+      console.error("Error: Need at least 2 issue numbers to check");
+      console.error("Usage: ccplate parallel-check <issue1> <issue2> [issue3...]");
+      process.exit(1);
+    }
+
+    console.log(`\n🔍 Checking parallel safety for ${issueNumbers.length} issues...\n`);
+
+    // For demo, create mock issue data
+    // Real implementation would fetch from GitHub
+    const issues = issueNumbers.map(num => ({
+      issueNumber: num,
+      labels: [`area:guardian/core`], // Would come from GitHub labels
+    }));
+
+    console.log("Note: Using mock labels. For accurate results, fetch from GitHub.\n");
+
+    const result = checkParallelSafety(issues);
+    console.log(formatParallelCheckResult(result));
+
+  } else if (command === "log") {
+    // View structured logs
+    const namespaceIndex = args.indexOf("--namespace");
+    const levelIndex = args.indexOf("--level");
+    const sinceIndex = args.indexOf("--since");
+    const tailIndex = args.indexOf("--tail");
+
+    const namespace = namespaceIndex !== -1 ? args[namespaceIndex + 1] : undefined;
+    const level = levelIndex !== -1 ? args[levelIndex + 1] as LogLevel : undefined;
+    const limit = tailIndex !== -1 ? parseInt(args[tailIndex + 1], 10) : 50;
+
+    let since: Date | undefined;
+    if (sinceIndex !== -1 && args[sinceIndex + 1]) {
+      const minutes = parseInt(args[sinceIndex + 1], 10);
+      if (!isNaN(minutes)) {
+        since = new Date(Date.now() - minutes * 60 * 1000);
+      }
+    }
+
+    const entries = parseLogEntries(ROOT_DIR, { namespace, level, since, limit });
+
+    if (entries.length === 0) {
+      console.log("No log entries found");
+      if (!existsSync(join(ROOT_DIR, "memory/guardian.log"))) {
+        console.log("Log file does not exist yet. Logs are written as Guardian runs.");
+      }
+    } else {
+      console.log(formatLogEntries(entries));
+      console.log(`\n(${entries.length} entries shown)`);
+    }
+
+  } else if (command === "resolve") {
+    // Merge conflict resolution
+    switch (subcommand) {
+      case "status": {
+        const files = getConflictedFiles(ROOT_DIR);
+        if (files.length === 0) {
+          console.log("No merge conflicts detected");
+        } else {
+          console.log(`\n${files.length} file(s) with conflicts:\n`);
+          for (const file of files) {
+            const analysis = analyzeConflict(file, ROOT_DIR);
+            console.log(formatConflictAnalysis(analysis));
+            console.log();
+          }
+        }
+        break;
+      }
+      case "auto": {
+        console.log("\n🔧 Auto-resolving merge conflicts...\n");
+        const result = await resolveConflicts(ROOT_DIR);
+
+        if (result.resolved.length === 0 && result.escalated.length === 0) {
+          console.log("No conflicts to resolve");
+        } else {
+          if (result.resolved.length > 0) {
+            console.log(`✓ Auto-resolved ${result.resolved.length} file(s):`);
+            for (const f of result.resolved) {
+              console.log(`    ${f}`);
+            }
+          }
+          if (result.escalated.length > 0) {
+            console.log(`\n⚠ Escalated ${result.escalated.length} file(s) to HITL:`);
+            for (const f of result.escalated) {
+              console.log(`    ${f}`);
+            }
+            if (result.hitlRequestId) {
+              console.log(`\nHITL Request: ${result.hitlRequestId}`);
+            }
+          }
+        }
+        break;
+      }
+      case "analyze": {
+        if (!taskId) {
+          console.error("Error: Missing file path");
+          console.error("Usage: ccplate resolve analyze <file>");
+          process.exit(1);
+        }
+        const analysis = analyzeConflict(taskId, ROOT_DIR);
+        console.log(formatConflictAnalysis(analysis));
+        break;
+      }
+      default:
+        console.error(`Unknown resolve command: ${subcommand}`);
+        console.log("Usage: ccplate resolve [status|auto|analyze <file>]");
         process.exit(1);
     }
   } else {

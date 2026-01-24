@@ -133,9 +133,25 @@ ccplate activity loop <n>         # Record loop iteration
 
 # POC Harness (Variant testing)
 ccplate harness --variants N --goal "desc"  # Spawn N variant worktrees
+ccplate harness --parallel                  # Run variants in parallel
+ccplate harness --max-concurrent 3          # Limit concurrent variants
 ccplate harness status            # View run status
 ccplate harness pick <variant>    # Merge selected variant
 ccplate harness cleanup           # Remove non-selected worktrees
+
+# Issue Labeling & Parallel Safety
+ccplate triage <issue-number>     # Analyze issue and suggest labels
+ccplate parallel-check 1 2 3      # Check if issues can run in parallel
+
+# Structured Logging
+ccplate log                       # View recent logs
+ccplate log --namespace guardian.harness    # Filter by namespace
+ccplate log --level error --since 60        # Errors in last hour
+
+# Merge Conflict Resolution
+ccplate resolve status            # Show conflicted files
+ccplate resolve auto              # Auto-resolve simple conflicts
+ccplate resolve analyze <file>    # Analyze specific conflict
 
 # LSP Sidecar
 ccplate lsp start                 # Start LSP server
@@ -214,6 +230,9 @@ Located in `src/lib/guardian/`:
 | `merge-ledger.ts` | Merge | Merge history and rollback |
 | `audit-log.ts` | Audit | Audit trail logging |
 | `error-log.ts` | Error | Standardized error logging |
+| `logger.ts` | Parallel | Structured JSONL logging |
+| `labeling.ts` | Parallel | Area-based issue labeling |
+| `merge-resolver.ts` | Parallel | Auto merge conflict resolution |
 
 ### Agents
 
@@ -224,6 +243,7 @@ Located in `.claude/agents/`:
 | `meta-agent.md` | Creates new specialized agents |
 | `rlm-adapter.md` | Context-aware exploration with ledger |
 | `team-coordinator.md` | Multi-worktree orchestration |
+| `merge-resolver.md` | Auto-resolve git merge conflicts |
 
 ## Code Style
 

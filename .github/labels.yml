@@ -1,0 +1,149 @@
+# CCPLATE GitHub Labels
+# Sync with: gh label sync --file .github/labels.yml
+
+# ==================== Area Labels ====================
+# Map directly to codebase structure for parallel-safety assessment
+
+- name: area:guardian/core
+  color: "1d76db"
+  description: "src/lib/guardian/*.ts - Core Guardian modules"
+
+- name: area:guardian/harness
+  color: "1d76db"
+  description: "src/lib/guardian/harness/* - POC Harness system"
+
+- name: area:guardian/adapters
+  color: "1d76db"
+  description: "src/lib/guardian/adapters/* - External integrations"
+
+- name: area:cli
+  color: "5319e7"
+  description: "src/cli/ccplate.ts - CLI commands"
+
+- name: area:api/auth
+  color: "0e8a16"
+  description: "src/app/api/auth/* - Auth endpoints"
+
+- name: area:api/builders
+  color: "0e8a16"
+  description: "src/app/api/*-builder/* - AI builder endpoints"
+
+- name: area:api/webhooks
+  color: "0e8a16"
+  description: "src/app/api/webhooks/* - Webhook endpoints"
+
+- name: area:ui/auth
+  color: "fbca04"
+  description: "src/components/features/auth/* - Auth UI"
+
+- name: area:ui/guardian
+  color: "fbca04"
+  description: "src/app/(protected)/guardian/* - Guardian UI"
+
+- name: area:builders
+  color: "d93f0b"
+  description: "src/lib/*-builder/* - AI builder logic"
+
+- name: area:hooks
+  color: "c5def5"
+  description: ".claude/hooks/* - Claude Code hooks"
+
+- name: area:agents
+  color: "c5def5"
+  description: ".claude/agents/* - Subagent definitions"
+
+- name: area:db
+  color: "b60205"
+  description: "prisma/* - Database schema"
+
+- name: area:e2e
+  color: "bfdadc"
+  description: "e2e/* - Playwright tests"
+
+- name: area:lsp
+  color: "006b75"
+  description: "src/lsp/* - LSP sidecar"
+
+- name: area:config
+  color: "e4e669"
+  description: "Configuration files (*.config.*, .env, etc.)"
+
+# ==================== Type Labels ====================
+
+- name: type:bug
+  color: "d73a4a"
+  description: "Something isn't working"
+
+- name: type:feature
+  color: "a2eeef"
+  description: "New feature or request"
+
+- name: type:refactor
+  color: "cfd3d7"
+  description: "Code restructuring"
+
+- name: type:docs
+  color: "0075ca"
+  description: "Documentation changes"
+
+- name: type:chore
+  color: "fef2c0"
+  description: "Maintenance tasks"
+
+- name: type:security
+  color: "b60205"
+  description: "Security-related issues"
+
+- name: type:performance
+  color: "d4c5f9"
+  description: "Performance improvements"
+
+# ==================== Priority Labels ====================
+
+- name: priority:critical
+  color: "b60205"
+  description: "Blocking issues - address immediately"
+
+- name: priority:high
+  color: "d93f0b"
+  description: "Important, address soon"
+
+- name: priority:medium
+  color: "fbca04"
+  description: "Normal priority"
+
+- name: priority:low
+  color: "0e8a16"
+  description: "Nice to have"
+
+# ==================== Status Labels ====================
+
+- name: status:in-progress
+  color: "0052cc"
+  description: "Being worked on"
+
+- name: status:blocked
+  color: "b60205"
+  description: "Blocked by dependency"
+
+- name: status:needs-review
+  color: "fbca04"
+  description: "Ready for review"
+
+- name: status:needs-info
+  color: "d876e3"
+  description: "Needs more information"
+
+# ==================== Agent Labels ====================
+
+- name: agent:assigned
+  color: "7057ff"
+  description: "Assigned to an agent"
+
+- name: agent:parallel-safe
+  color: "0e8a16"
+  description: "Safe to run in parallel with other tasks"
+
+- name: agent:needs-serial
+  color: "d93f0b"
+  description: "Must run sequentially (shared resources)"

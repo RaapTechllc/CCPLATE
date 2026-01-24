@@ -162,3 +162,44 @@ export {
   type AuditCategory,
   type AuditEntry,
 } from './audit-log';
+
+// Structured logger
+export {
+  createLogger,
+  loggers,
+  parseLogEntries,
+  formatLogEntries,
+  type LogLevel,
+  type LogEntry,
+} from './logger';
+
+// Labeling (parallel-safety)
+export {
+  AREA_LABELS,
+  getLabelsForFiles,
+  hasAreaConflict,
+  getAreaPatterns,
+  extractFileMentions,
+  inferTypeLabel,
+  inferPriorityLabel,
+  analyzeIssue,
+  checkParallelSafety,
+  formatParallelCheckResult,
+  type AreaLabel,
+  type IssueAnalysis,
+  type ParallelCheckResult,
+} from './labeling';
+
+// Merge conflict resolver
+export {
+  getConflictedFiles,
+  extractConflictMarkers,
+  analyzeConflict,
+  applyResolution,
+  resolveConflicts,
+  formatConflictAnalysis,
+  type ConflictType,
+  type ConflictMarker,
+  type ConflictAnalysis,
+  type ResolutionResult,
+} from './merge-resolver';

@@ -1,6 +1,7 @@
 import { execSync } from "child_process";
 import { existsSync, mkdirSync, rmSync } from "fs";
 import { join } from "path";
+import pMap from "p-map";
 import {
   loadHarnessState,
   saveHarnessState,
@@ -15,6 +16,9 @@ import {
 import { runVariant, type VariantResult } from "./variant-runner";
 import { saveHarnessReport, printVariantComparison } from "./report";
 import { loadPRD } from "../prd";
+import { createLogger } from "../logger";
+
+const log = createLogger("guardian.harness");
 
 export interface HarnessOptions {
   rootDir: string;
@@ -24,7 +28,8 @@ export interface HarnessOptions {
   baseBranch?: string;
   maxMinutes?: number;
   maxIterations?: number;
-  parallel?: number;
+  parallel?: boolean;         // Run variants concurrently
+  maxConcurrent?: number;     // Max simultaneous variants (default: 3)
   requirePRD?: boolean;
   dryRun?: boolean;
   keepWorktrees?: boolean;
@@ -113,7 +118,8 @@ export async function startHarnessRun(options: HarnessOptions): Promise<HarnessR
     baseBranch,
     maxMinutes = 30,
     maxIterations = 20,
-    parallel: _parallel = variantCount,
+    parallel = false,
+    maxConcurrent = 3,
     requirePRD = true,
     dryRun = false,
   } = options;
@@ -235,15 +241,10 @@ export async function startHarnessRun(options: HarnessOptions): Promise<HarnessR
   // Run variants
   console.log("\n🚀 Running variants...\n");
 
-  const results: VariantResult[] = [];
-  // Future: implement parallel execution with concurrency control
-  // const concurrency = Math.min(_parallel, variants.length);
-
-  // Simple sequential execution for now
-  // TODO: Implement proper parallel execution with concurrency control
-  for (const variant of variants) {
+  const runSingleVariant = async (variant: VariantState): Promise<VariantResult> => {
+    log.info("Starting variant", { variantId: variant.id, name: variant.name });
     console.log(`\n▶ Running ${variant.name}...`);
-    
+
     const result = await runVariant({
       rootDir,
       runId,
@@ -256,11 +257,44 @@ export async function startHarnessRun(options: HarnessOptions): Promise<HarnessR
         if (msg) console.log(`  [${id}] ${msg}`);
       },
     });
-    
-    results.push(result);
-    
+
     const emoji = result.status === "completed" ? "✓" : result.status === "timeout" ? "⏱" : "✗";
     console.log(`  ${emoji} ${variant.name}: ${result.status}`);
+
+    log.info("Variant completed", {
+      variantId: variant.id,
+      status: result.status,
+      duration: result.duration,
+    });
+
+    return result;
+  };
+
+  let results: VariantResult[];
+
+  if (parallel) {
+    // Parallel execution with concurrency control
+    const concurrency = Math.min(maxConcurrent, variants.length);
+    console.log(`  Mode: Parallel (max ${concurrency} concurrent)\n`);
+
+    log.info("Starting parallel execution", {
+      variantCount: variants.length,
+      concurrency,
+    });
+
+    results = await pMap(variants, runSingleVariant, { concurrency });
+  } else {
+    // Sequential execution
+    console.log(`  Mode: Sequential\n`);
+
+    log.info("Starting sequential execution", {
+      variantCount: variants.length,
+    });
+
+    results = [];
+    for (const variant of variants) {
+      results.push(await runSingleVariant(variant));
+    }
   }
 
   // Complete run
