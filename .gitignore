@@ -48,3 +48,15 @@ next-env.d.ts
 # uploads
 /uploads/*
 !/uploads/.gitkeep
+
+# Editor state
+.cursor/
+
+# Local config
+.mcp.json
+
+# Guardian runtime state (changes frequently)
+memory/guardian-state.json
+memory/workflow-state.json
+memory/tool-log.txt
+memory/guardian.log
