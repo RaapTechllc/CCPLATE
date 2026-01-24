@@ -71,17 +71,21 @@ interface AllowResponse {
   decision: "approve";
 }
 
-// Paths that are always allowed (worktrees, memory)
+// Paths that are always allowed (worktrees, memory, agents, skills, rules)
 const ALWAYS_ALLOW: string[] = [
   ".worktrees/",
   "memory/",
   ".claude/agents/",
+  ".claude/skills/",
+  ".claude/rules/",
 ];
 
 // Worktree isolation paths (used when CCPLATE_WORKTREE is set)
 const WORKTREE_SHARED_PATHS: string[] = [
   "memory/",
   ".claude/agents/",
+  ".claude/skills/",
+  ".claude/rules/",
 ];
 
 // Files that should NEVER be written to

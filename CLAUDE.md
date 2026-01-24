@@ -238,12 +238,52 @@ Located in `src/lib/guardian/`:
 
 Located in `.claude/agents/`:
 
+#### Infrastructure Agents (CCPLATE Core)
+
 | Agent | Purpose |
 |-------|---------|
 | `meta-agent.md` | Creates new specialized agents |
 | `rlm-adapter.md` | Context-aware exploration with ledger |
 | `team-coordinator.md` | Multi-worktree orchestration |
 | `merge-resolver.md` | Auto-resolve git merge conflicts |
+
+#### Workflow Agents (from everything-claude-code)
+
+| Agent | Trigger | Purpose |
+|-------|---------|---------|
+| `code-reviewer.md` | After any code modification | Catch quality, security, performance issues before commit |
+| `security-reviewer.md` | Before deploying auth/input code | Detect OWASP Top 10 vulnerabilities, secrets exposure |
+| `tdd-guide.md` | When writing features/fixes | Enforce test-first methodology, 80% coverage |
+| `build-error-resolver.md` | When npm build/tsc fails | Fix build errors with minimal changes |
+| `refactor-cleaner.md` | During maintenance | Remove dead code, duplicates, unused deps |
+
+### Skills
+
+Located in `.claude/skills/`:
+
+| Skill | Purpose | Invoke With |
+|-------|---------|-------------|
+| `coding-standards` | TypeScript/React best practices | `/skill coding-standards` |
+| `tdd-workflow` | TDD workflow guidance | `/skill tdd-workflow` |
+| `security-review` | Security checklist and patterns | `/skill security-review` |
+| `backend-patterns` | API, database, caching patterns | `/skill backend-patterns` |
+| `frontend-patterns` | React, state, performance patterns | `/skill frontend-patterns` |
+| `continuous-learning` | Auto-extract patterns from sessions | Runs as Stop hook |
+
+### Rules
+
+Located in `.claude/rules/` (auto-loaded):
+
+| Rule | Enforces |
+|------|----------|
+| `security.md` | Mandatory security checks, secret management |
+| `coding-style.md` | Immutability, file organization, error handling |
+| `testing.md` | 80% coverage, TDD workflow, test structure |
+| `git-workflow.md` | Commit format, PR workflow, safety rules |
+| `agents.md` | Agent orchestration, parallel execution |
+| `patterns.md` | API response format, common patterns |
+| `performance.md` | Model selection, context management |
+| `hooks.md` | Hook reference (DO NOT MODIFY Guardian hooks) |
 
 ## Code Style
 
@@ -327,7 +367,29 @@ CCPLATE/
 │   ├── agents/               # Subagent definitions
 │   │   ├── meta-agent.md     # Agent factory
 │   │   ├── rlm-adapter.md    # Context exploration
-│   │   └── team-coordinator.md # Worktree orchestration
+│   │   ├── team-coordinator.md # Worktree orchestration
+│   │   ├── merge-resolver.md # Git conflict resolution
+│   │   ├── code-reviewer.md  # Code quality review
+│   │   ├── security-reviewer.md # Security analysis
+│   │   ├── tdd-guide.md      # Test-driven development
+│   │   ├── build-error-resolver.md # Build fixes
+│   │   └── refactor-cleaner.md # Dead code removal
+│   ├── skills/               # Skill definitions
+│   │   ├── coding-standards/ # Code quality patterns
+│   │   ├── tdd-workflow/     # TDD methodology
+│   │   ├── security-review/  # Security checklist
+│   │   ├── backend-patterns/ # Backend patterns
+│   │   ├── frontend-patterns/ # Frontend patterns
+│   │   └── continuous-learning/ # Pattern extraction
+│   ├── rules/                # Auto-loaded rules
+│   │   ├── security.md       # Security guidelines
+│   │   ├── coding-style.md   # Style guide
+│   │   ├── testing.md        # Test requirements
+│   │   ├── git-workflow.md   # Git conventions
+│   │   ├── agents.md         # Agent orchestration
+│   │   ├── patterns.md       # Common patterns
+│   │   ├── performance.md    # Performance tips
+│   │   └── hooks.md          # Hooks reference
 │   └── hooks/                # Claude Code hooks
 │       ├── guardian-tick.ts  # PostToolUse supervision
 │       ├── path-guard.ts     # PreToolUse protection
@@ -403,5 +465,5 @@ CCPLATE/
 
 ---
 
-**Last Updated:** 2026-01-23
-**Bootstrap Version:** 1.0
+**Last Updated:** 2026-01-24
+**Bootstrap Version:** 1.1 (Cherry-pick from everything-claude-code)
