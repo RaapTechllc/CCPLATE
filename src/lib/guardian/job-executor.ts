@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import { GuardianJob, updateJob, getPendingJobs } from './job-queue';
 import { analyzeIssue } from './labeling';
 import { createLogger } from './logger';
@@ -56,14 +56,32 @@ export async function executeJob(job: GuardianJob): Promise<void> {
 
     // Create worktree if needed
     if (config.createWorktree) {
-      worktreeId = `job-${job.source.issueNumber || job.source.prNumber || Date.now()}`;
+      const idSource = job.source.issueNumber || job.source.prNumber || Date.now();
+
+      // Ensure idSource is a safe string (numeric) to prevent command injection
+      const safeId = String(idSource).replace(/[^0-9]/g, '');
+      worktreeId = `job-${safeId || Date.now()}`;
 
       log.info('Creating worktree for job', { jobId: job.id, worktreeId });
 
-      execSync(`bun run src/cli/ccplate.ts worktree create ${worktreeId} --note "Job ${job.id}"`, {
+      // Use spawnSync with an array of arguments to prevent shell injection
+      const result = spawnSync('bun', [
+        'run',
+        'src/cli/ccplate.ts',
+        'worktree',
+        'create',
+        worktreeId,
+        '--note',
+        `Job ${job.id}`
+      ], {
         cwd: process.cwd(),
         stdio: 'pipe',
+        encoding: 'utf-8'
       });
+
+      if (result.status !== 0) {
+        throw new Error(`Failed to create worktree: ${result.stderr || result.stdout}`);
+      }
 
       updateJob(job.id, { worktreeId });
     }
