@@ -3,6 +3,11 @@ import * as crypto from "crypto";
 import { createJob } from "@/lib/guardian/job-queue";
 import { analyzeIssue } from "@/lib/guardian/labeling";
 import { createLogger } from "@/lib/guardian/logger";
+import {
+  validatePositiveInteger,
+  validateOptionalPositiveInteger,
+  ValidationError,
+} from "@/lib/guardian/security";
 
 const log = createLogger("guardian.webhook");
 
@@ -51,28 +56,38 @@ const GUARDIAN_COMMANDS: Record<
 /**
  * Verify GitHub webhook signature.
  *
- * SECURITY: In production, signature verification is mandatory.
+ * SECURITY: Signature verification is mandatory in all environments.
  * Set GITHUB_WEBHOOK_SECRET environment variable.
+ *
+ * The only exception is for test environments with explicit opt-in:
+ * Set ALLOW_UNSIGNED_WEBHOOKS=true in test environment only.
  */
 function verifySignature(
   payload: string,
   signature: string,
   secret: string
 ): { valid: boolean; error?: string } {
-  // In production, require webhook secret
+  // SECURITY: Require webhook secret in all environments
   if (!secret) {
-    if (process.env.NODE_ENV === "production") {
-      return {
-        valid: false,
-        error: "GITHUB_WEBHOOK_SECRET not configured (required in production)",
-      };
+    // Only allow bypass in test environment with explicit opt-in
+    if (
+      process.env.NODE_ENV === "test" &&
+      process.env.ALLOW_UNSIGNED_WEBHOOKS === "true"
+    ) {
+      log.warn(
+        "Webhook signature verification disabled for testing. " +
+          "ALLOW_UNSIGNED_WEBHOOKS=true is set."
+      );
+      return { valid: true };
     }
-    // Development only: warn but allow
-    log.warn(
-      "Webhook signature verification skipped (GITHUB_WEBHOOK_SECRET not set). " +
-        "This is only allowed in development."
-    );
-    return { valid: true };
+
+    // All other environments: require the secret
+    return {
+      valid: false,
+      error:
+        "GITHUB_WEBHOOK_SECRET is required. " +
+        "Set the environment variable with your GitHub webhook secret.",
+    };
   }
 
   // Require signature header when secret is configured
@@ -269,12 +284,33 @@ export async function POST(request: NextRequest) {
       const comment = data.comment as Record<string, unknown>;
       const issue = data.issue as Record<string, unknown>;
       const commentBody = comment?.body as string;
-      const commentId = comment?.id as number;
-      const issueNumber = issue?.number as number;
+      const rawCommentId = comment?.id;
+      const rawIssueNumber = issue?.number;
       const issueTitle = issue?.title as string;
       const issueBody = issue?.body as string;
       const author = (comment?.user as Record<string, unknown>)
         ?.login as string;
+
+      // SECURITY: Validate numeric fields from external webhook payload
+      let issueNumber: number;
+      let commentId: number;
+      try {
+        issueNumber = validatePositiveInteger(rawIssueNumber, "issueNumber");
+        commentId = validatePositiveInteger(rawCommentId, "commentId");
+      } catch (error) {
+        if (error instanceof ValidationError) {
+          log.warn("Invalid webhook payload", {
+            event,
+            error: error.message,
+            field: error.field,
+          });
+          return NextResponse.json(
+            { error: `Invalid ${error.field}: ${error.message}` },
+            { status: 400 }
+          );
+        }
+        throw error;
+      }
 
       const parsed = parseGuardianCommand(commentBody);
 
@@ -349,9 +385,27 @@ export async function POST(request: NextRequest) {
     // Handle new issues (auto-triage)
     if (event === "issues" && (data.action === "opened" || data.action === "edited")) {
       const issue = data.issue as Record<string, unknown>;
-      const issueNumber = issue?.number as number;
+      const rawIssueNumber = issue?.number;
       const issueTitle = issue?.title as string;
       const issueBody = issue?.body as string;
+
+      // SECURITY: Validate issueNumber from external webhook payload
+      let issueNumber: number;
+      try {
+        issueNumber = validatePositiveInteger(rawIssueNumber, "issueNumber");
+      } catch (error) {
+        if (error instanceof ValidationError) {
+          log.warn("Invalid webhook payload for issues event", {
+            event,
+            error: error.message,
+          });
+          return NextResponse.json(
+            { error: `Invalid issueNumber: ${error.message}` },
+            { status: 400 }
+          );
+        }
+        throw error;
+      }
 
       // Auto-analyze and suggest labels (but don't apply automatically on open)
       const analysis = analyzeIssue(issueNumber, issueTitle || "", issueBody || "");

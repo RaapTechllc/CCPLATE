@@ -58,6 +58,52 @@ const UserInputSchema = z.object({
 const validated = UserInputSchema.parse(userInput)
 ```
 
+## Command Execution Security
+
+**CRITICAL: Never use string interpolation in shell commands**
+
+```typescript
+// NEVER: String interpolation (COMMAND INJECTION RISK!)
+execSync(`git worktree add ${userInput}`);  // DANGEROUS!
+execSync(`echo ${untrustedData}`);           // DANGEROUS!
+
+// ALWAYS: Use spawnSync with argument arrays
+import { spawnSync } from 'child_process';
+spawnSync('git', ['worktree', 'add', userInput]);  // SAFE
+spawnSync('echo', [untrustedData]);                 // SAFE
+
+// ALWAYS: Validate external input before use
+import { validatePositiveInteger, validateSafeIdentifier } from './security';
+const issueNumber = validatePositiveInteger(input, 'issueNumber');
+const worktreeId = validateSafeIdentifier(input, 'worktreeId');
+```
+
+### Shell Metacharacters to Reject
+
+| Character | Risk |
+|-----------|------|
+| `;` | Command chaining |
+| `|` | Pipe to another command |
+| `&` | Background execution |
+| `` ` `` | Command substitution |
+| `$()` | Command substitution |
+| `>` `<` | Redirect I/O |
+| `\n` `\r` | Newline injection |
+| `'` `"` | Quote escaping |
+| `\\` | Escape sequences |
+
+### Validation Functions
+
+Located in `src/lib/guardian/security/`:
+
+| Function | Use For |
+|----------|---------|
+| `validatePositiveInteger` | Issue/PR numbers, comment IDs |
+| `validateSafeIdentifier` | Worktree IDs, task IDs, job IDs |
+| `validateGitRef` | Commit hashes, branch names |
+| `validatePath` | File paths (prevents traversal) |
+| `escapeShellArg` | Fallback only; prefer spawnSync |
+
 ## Security Response Protocol
 
 If security issue found:

@@ -1,7 +1,8 @@
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import { existsSync, writeFileSync, appendFileSync, mkdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { updateVariantStatus, type VariantState } from "./harness-state";
+import { validateSafeIdentifier, validatePath, ValidationError } from "../security";
 
 export interface VariantRunnerOptions {
   rootDir: string;
@@ -68,6 +69,36 @@ export async function runVariant(options: VariantRunnerOptions): Promise<Variant
   const { rootDir, runId, variant, goal, prdHash, maxMinutes, onProgress } = options;
   const startTime = Date.now();
 
+  // SECURITY: Validate variant.id before using in file paths
+  try {
+    validateSafeIdentifier(variant.id, 'variant.id');
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      return {
+        variantId: variant.id,
+        status: "failed",
+        error: `Invalid variant ID: ${error.message}`,
+        duration: Date.now() - startTime,
+      };
+    }
+    throw error;
+  }
+
+  // SECURITY: Validate worktree path
+  try {
+    validatePath(variant.worktreePath, 'variant.worktreePath', { allowAbsolute: false });
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      return {
+        variantId: variant.id,
+        status: "failed",
+        error: `Invalid worktree path: ${error.message}`,
+        duration: Date.now() - startTime,
+      };
+    }
+    throw error;
+  }
+
   const variantDir = ensureVariantDir(rootDir, variant.id);
   const logPath = join(variantDir, "run.log");
 
@@ -108,27 +139,64 @@ export async function runVariant(options: VariantRunnerOptions): Promise<Variant
     appendFileSync(logPath, `Worktree: ${worktreePath}\n`);
     appendFileSync(logPath, `\n--- Execution Log ---\n\n`);
 
-    // For now, we simulate the autonomous loop by running a simple build/test
-    // In a full implementation, this would spawn an actual agent process
-    const child = spawn("sh", ["-c", `
-      cd "${worktreePath}"
-      
-      # Check if package.json exists and try to build
-      if [ -f "package.json" ]; then
-        echo "[POC] Running npm install..."
-        npm install --silent 2>&1 || true
-        
-        echo "[POC] Running build check..."
-        npm run build --silent 2>&1 || echo "[POC] Build had issues"
-        
-        echo "[POC] Running type check..."
-        npx tsc --noEmit 2>&1 || echo "[POC] Type check had issues"
-      fi
-      
-      # Create POC_SUMMARY.md if it doesn't exist
-      if [ ! -f "POC_SUMMARY.md" ]; then
-        cat > POC_SUMMARY.md << 'EOF'
-# POC Summary: ${variant.id}
+    // SECURITY: Run build steps using spawnSync with argument arrays
+    // instead of shell heredoc to prevent command injection
+    const runBuildSteps = (): { success: boolean; output: string[] } => {
+      const output: string[] = [];
+      const packageJsonPath = join(worktreePath, "package.json");
+
+      // Check if package.json exists
+      if (existsSync(packageJsonPath)) {
+        // Run npm install
+        output.push("[POC] Running npm install...");
+        const installResult = spawnSync("npm", ["install", "--silent"], {
+          cwd: worktreePath,
+          encoding: "utf-8",
+          env: {
+            ...process.env,
+            CCPLATE_WORKTREE: variant.id,
+            CCPLATE_HARNESS_RUN: runId,
+          },
+        });
+        if (installResult.stdout) output.push(installResult.stdout);
+        if (installResult.stderr) output.push(installResult.stderr);
+
+        // Run build
+        output.push("[POC] Running build check...");
+        const buildResult = spawnSync("npm", ["run", "build", "--silent"], {
+          cwd: worktreePath,
+          encoding: "utf-8",
+          env: {
+            ...process.env,
+            CCPLATE_WORKTREE: variant.id,
+            CCPLATE_HARNESS_RUN: runId,
+          },
+        });
+        if (buildResult.stdout) output.push(buildResult.stdout);
+        if (buildResult.stderr) output.push(buildResult.stderr);
+        if (buildResult.status !== 0) output.push("[POC] Build had issues");
+
+        // Run type check
+        output.push("[POC] Running type check...");
+        const tscResult = spawnSync("npx", ["tsc", "--noEmit"], {
+          cwd: worktreePath,
+          encoding: "utf-8",
+          env: {
+            ...process.env,
+            CCPLATE_WORKTREE: variant.id,
+            CCPLATE_HARNESS_RUN: runId,
+          },
+        });
+        if (tscResult.stdout) output.push(tscResult.stdout);
+        if (tscResult.stderr) output.push(tscResult.stderr);
+        if (tscResult.status !== 0) output.push("[POC] Type check had issues");
+      }
+
+      // SECURITY: Create POC_SUMMARY.md using writeFileSync instead of shell heredoc
+      const summaryPath = join(worktreePath, "POC_SUMMARY.md");
+      if (!existsSync(summaryPath)) {
+        // Note: variant.id is already validated above
+        const summaryContent = `# POC Summary: ${variant.id}
 
 ## Approach
 [Auto-generated placeholder - human/agent should fill this in]
@@ -141,11 +209,17 @@ export async function runVariant(options: VariantRunnerOptions): Promise<Variant
 1. Review build output
 2. Implement core functionality
 3. Add tests
-EOF
-      fi
-      
-      echo "[POC] Variant execution complete"
-    `], {
+`;
+        writeFileSync(summaryPath, summaryContent);
+      }
+
+      output.push("[POC] Variant execution complete");
+      return { success: true, output };
+    };
+
+    // Run build steps asynchronously using spawn for progress updates
+    const child = spawn(process.platform === "win32" ? "cmd" : "sh",
+      process.platform === "win32" ? ["/c", "echo", "Starting build..."] : ["-c", "echo 'Starting build...'"], {
       cwd: worktreePath,
       env: {
         ...process.env,
@@ -153,6 +227,16 @@ EOF
         CCPLATE_HARNESS_RUN: runId,
       },
     });
+
+    // Run the actual build steps synchronously after spawn starts
+    let buildOutput: { success: boolean; output: string[] } | null = null;
+    setTimeout(() => {
+      buildOutput = runBuildSteps();
+      for (const line of buildOutput.output) {
+        appendFileSync(logPath, line + "\n");
+        onProgress?.(variant.id, line.split("\n").pop() || "");
+      }
+    }, 100);
 
     child.stdout?.on("data", (data) => {
       const text = data.toString();

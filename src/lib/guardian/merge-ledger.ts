@@ -7,7 +7,8 @@
 
 import { existsSync, readFileSync, appendFileSync, mkdirSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
+import { validateGitRef } from "./security";
 
 export interface MergeRecord {
   id: string;
@@ -149,47 +150,83 @@ export function rollbackMerge(
     return { success: false, message: "Merge already rolled back" };
   }
 
+  // SECURITY: Validate commit hash before using in git commands
+  try {
+    validateGitRef(targetRecord.preMergeCommit, 'preMergeCommit', 'hash');
+  } catch {
+    return {
+      success: false,
+      message: `Invalid pre-merge commit hash: ${targetRecord.preMergeCommit}`,
+    };
+  }
+
   // Verify we can rollback (check if preMergeCommit exists)
   try {
-    execSync(`git rev-parse ${targetRecord.preMergeCommit}`, { 
-      cwd: rootDir, 
+    // SECURITY: Use spawnSync with argument array instead of string interpolation
+    const result = spawnSync("git", ["rev-parse", targetRecord.preMergeCommit], {
+      cwd: rootDir,
       encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"]
+      stdio: ["pipe", "pipe", "pipe"],
     });
+    if (result.status !== 0) {
+      throw new Error("Commit not found");
+    }
   } catch {
-    return { 
-      success: false, 
-      message: `Pre-merge commit no longer exists: ${targetRecord.preMergeCommit}` 
+    return {
+      success: false,
+      message: `Pre-merge commit no longer exists: ${targetRecord.preMergeCommit}`
+    };
+  }
+
+  // SECURITY: Validate postMergeCommit hash before using in git commands
+  try {
+    validateGitRef(targetRecord.postMergeCommit, 'postMergeCommit', 'hash');
+  } catch {
+    return {
+      success: false,
+      message: `Invalid post-merge commit hash: ${targetRecord.postMergeCommit}`,
     };
   }
 
   // Create revert commit
   try {
     // First, check current HEAD
-    const currentHead = execSync("git rev-parse HEAD", { 
-      cwd: rootDir, 
-      encoding: "utf-8" 
-    }).trim();
+    // SECURITY: Use spawnSync with argument array
+    const headResult = spawnSync("git", ["rev-parse", "HEAD"], {
+      cwd: rootDir,
+      encoding: "utf-8",
+    });
+    const currentHead = (headResult.stdout || "").trim();
 
     // If HEAD is the merge commit, we can do a clean revert
     if (currentHead === targetRecord.postMergeCommit) {
       // Reset to pre-merge state
-      execSync(`git reset --hard ${targetRecord.preMergeCommit}`, { 
+      // SECURITY: Use spawnSync with argument array
+      const resetResult = spawnSync("git", ["reset", "--hard", targetRecord.preMergeCommit], {
         cwd: rootDir,
-        encoding: "utf-8"
+        encoding: "utf-8",
       });
+      if (resetResult.status !== 0) {
+        throw new Error(resetResult.stderr || "Reset failed");
+      }
     } else {
       // Create a revert of the merge commit
-      execSync(`git revert -m 1 ${targetRecord.postMergeCommit} --no-edit`, { 
+      // SECURITY: Use spawnSync with argument array
+      const revertResult = spawnSync("git", ["revert", "-m", "1", targetRecord.postMergeCommit, "--no-edit"], {
         cwd: rootDir,
-        encoding: "utf-8"
+        encoding: "utf-8",
       });
+      if (revertResult.status !== 0) {
+        throw new Error(revertResult.stderr || "Revert failed");
+      }
     }
 
-    const newCommit = execSync("git rev-parse HEAD", { 
-      cwd: rootDir, 
-      encoding: "utf-8" 
-    }).trim();
+    // SECURITY: Use spawnSync with argument array
+    const newHeadResult = spawnSync("git", ["rev-parse", "HEAD"], {
+      cwd: rootDir,
+      encoding: "utf-8",
+    });
+    const newCommit = (newHeadResult.stdout || "").trim();
 
     // Update the ledger record
     targetRecord.status = "rolled_back";

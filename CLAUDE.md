@@ -233,6 +233,7 @@ Located in `src/lib/guardian/`:
 | `logger.ts` | Parallel | Structured JSONL logging |
 | `labeling.ts` | Parallel | Area-based issue labeling |
 | `merge-resolver.ts` | Parallel | Auto merge conflict resolution |
+| `security/` | Security | Input validation, injection prevention |
 
 ### Agents
 
@@ -356,6 +357,8 @@ If the same error occurs 3 times:
 - **E2E Test Timeouts:** Production server can be slow (~6s per page) causing Playwright timeouts. Consider using dev server for tests or increasing timeout values.
 - **Prisma Patches Available:** Non-breaking patches available for Prisma. Safe to update when convenient.
 - **GitHub Webhook Partial:** The GitHub webhook parses @guardian commands but doesn't yet enqueue jobs. Documented as backlog item.
+- **Command Injection Protection:** All shell commands use `spawnSync` with argument arrays, not string interpolation. External input (webhooks, CLI args) MUST be validated using `src/lib/guardian/security/` before use. See `.claude/security/sentinel.md` for details.
+- **Webhook Authentication Required:** `GITHUB_WEBHOOK_SECRET` is required in all environments. Only test environments with `ALLOW_UNSIGNED_WEBHOOKS=true` can bypass signature verification.
 
 ## Architecture
 

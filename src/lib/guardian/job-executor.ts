@@ -1,7 +1,8 @@
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import { GuardianJob, updateJob, getPendingJobs } from './job-queue';
 import { analyzeIssue } from './labeling';
 import { createLogger } from './logger';
+import { validatePositiveInteger, validateSafeIdentifier, ValidationError } from './security';
 
 const log = createLogger('guardian.job');
 
@@ -56,14 +57,54 @@ export async function executeJob(job: GuardianJob): Promise<void> {
 
     // Create worktree if needed
     if (config.createWorktree) {
-      worktreeId = `job-${job.source.issueNumber || job.source.prNumber || Date.now()}`;
+      // SECURITY: Validate external input before use in shell commands
+      const sourceId = job.source.issueNumber ?? job.source.prNumber;
+      if (sourceId !== undefined) {
+        try {
+          validatePositiveInteger(sourceId, 'issueNumber/prNumber');
+        } catch (error) {
+          if (error instanceof ValidationError) {
+            throw new Error(`Invalid source ID: ${error.message}`);
+          }
+          throw error;
+        }
+      }
+
+      // Create worktree ID from validated source or timestamp
+      const worktreeSuffix = sourceId ?? Date.now();
+      worktreeId = `job-${worktreeSuffix}`;
+
+      // Validate the final worktree ID
+      try {
+        validateSafeIdentifier(worktreeId, 'worktreeId');
+      } catch (error) {
+        if (error instanceof ValidationError) {
+          throw new Error(`Invalid worktree ID: ${error.message}`);
+        }
+        throw error;
+      }
 
       log.info('Creating worktree for job', { jobId: job.id, worktreeId });
 
-      execSync(`bun run src/cli/ccplate.ts worktree create ${worktreeId} --note "Job ${job.id}"`, {
+      // SECURITY: Use spawnSync with argument array instead of string interpolation
+      const result = spawnSync('bun', [
+        'run',
+        'src/cli/ccplate.ts',
+        'worktree',
+        'create',
+        worktreeId,
+        '--note',
+        `Job ${job.id}`,
+      ], {
         cwd: process.cwd(),
         stdio: 'pipe',
+        encoding: 'utf-8',
       });
+
+      if (result.status !== 0) {
+        const errorMsg = result.stderr?.toString() || 'Unknown error';
+        throw new Error(`Worktree creation failed: ${errorMsg}`);
+      }
 
       updateJob(job.id, { worktreeId });
     }

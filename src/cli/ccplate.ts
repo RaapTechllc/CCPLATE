@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, resolve } from "path";
 import { createLSPClient } from "../lsp/sidecar";
@@ -78,6 +78,22 @@ import {
   resolveConflicts,
   formatConflictAnalysis,
 } from "../lib/guardian/merge-resolver";
+import {
+  getProfiles,
+  getProfile,
+  getActiveProfile,
+  activateProfile,
+  restoreMCPConfig,
+  formatProfileList,
+  getConfiguredServers,
+} from "../lib/guardian/stack-profiles";
+import {
+  createHandoff,
+  hasHandoff,
+  loadHandoff,
+  clearHandoff,
+  formatHandoff,
+} from "../lib/guardian/handoff";
 
 const ROOT_DIR = resolve(import.meta.dir, "../..");
 const CONFIG_PATH = join(ROOT_DIR, "ccplate.config.json");
@@ -347,14 +363,29 @@ function openWorktree(taskId: string): void {
 
   // Detect editor from environment or default to code
   const editor = process.env.EDITOR || process.env.VISUAL || "code";
-  const editorCmd = editor === "code" ? `code "${fullPath}"` : `${editor} "${fullPath}"`;
-  
+
+  // SECURITY: Use spawnSync with argument array instead of string interpolation
+  // This prevents command injection through malicious EDITOR values
   try {
-    execSync(editorCmd, { stdio: "inherit" });
-    console.log(`✓ Opened worktree in ${editor}: ${worktree.path}`);
+    const result = spawnSync(editor, [fullPath], {
+      stdio: "inherit",
+      shell: false, // Explicitly disable shell to prevent injection
+    });
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    if (result.status !== 0 && result.status !== null) {
+      // Some editors return non-zero on success (e.g., when detaching)
+      // Only treat as error if it's a clear failure
+      console.log(`✓ Opened worktree in ${editor}: ${worktree.path}`);
+    } else {
+      console.log(`✓ Opened worktree in ${editor}: ${worktree.path}`);
+    }
   } catch (error) {
     console.error(`Error opening editor: ${(error as Error).message}`);
-    console.log(`\nTry manually: ${editorCmd}`);
+    console.log(`\nTry manually: ${editor} "${fullPath}"`);
     process.exit(1);
   }
 }
@@ -953,6 +984,16 @@ Usage:
   ccplate resolve auto                            Auto-resolve simple conflicts
   ccplate resolve analyze <file>                  Analyze conflict in file
 
+  ccplate profile list                            List available MCP profiles
+  ccplate profile activate <id>                   Activate a profile
+  ccplate profile reset                           Restore original .mcp.json
+  ccplate profile wizard                          Run interactive profile wizard
+  ccplate profile status                          Show active profile and servers
+
+  ccplate handoff create                          Create manual session handoff
+  ccplate handoff show                            Display current handoff
+  ccplate handoff archive                         Archive handoff without restoring
+
   ccplate validate status                         Show Playwright validation status
   ccplate validate run [test-pattern]             Run Playwright tests
   ccplate validate register <task-id> <patterns>  Register tests required for task
@@ -1008,6 +1049,16 @@ Examples:
   ccplate harness status
   ccplate harness pick variant-1
   ccplate harness cleanup
+
+  ccplate profile list                      # Show available profiles
+  ccplate profile activate beginner-light   # Max context savings
+  ccplate profile wizard                    # Interactive setup
+  ccplate profile status                    # Show current profile
+  ccplate profile reset                     # Restore original config
+
+  ccplate handoff create                    # Create session handoff
+  ccplate handoff show                      # View current handoff
+  ccplate handoff archive                   # Archive without using
 
 Options:
   --help, -h    Show this help message
@@ -1958,6 +2009,145 @@ async function main(): Promise<void> {
       default:
         console.error(`Unknown resolve command: ${subcommand}`);
         console.log("Usage: ccplate resolve [status|auto|analyze <file>]");
+        process.exit(1);
+    }
+  } else if (command === "profile") {
+    switch (subcommand) {
+      case "list": {
+        const profiles = getProfiles();
+        const active = getActiveProfile(ROOT_DIR);
+        console.log(formatProfileList(profiles, active?.profileId));
+        break;
+      }
+      case "activate": {
+        if (!taskId) {
+          console.error("Error: Missing profile ID");
+          console.error("Usage: ccplate profile activate <profile-id>");
+          console.error("\nAvailable profiles:");
+          getProfiles().forEach(p => console.error(`  - ${p.id}: ${p.name}`));
+          process.exit(1);
+        }
+        const result = activateProfile(ROOT_DIR, taskId);
+        if (result.success) {
+          console.log(`\n✅ ${result.message}`);
+          if (result.changes) {
+            if (result.changes.enabled.length > 0) {
+              console.log(`   Enabled: ${result.changes.enabled.join(", ")}`);
+            }
+            if (result.changes.disabled.length > 0) {
+              console.log(`   Disabled: ${result.changes.disabled.join(", ")}`);
+            }
+          }
+          console.log("\n💡 Restart Claude Code to apply changes.");
+        } else {
+          console.error(`\n❌ ${result.message}`);
+          process.exit(1);
+        }
+        break;
+      }
+      case "reset": {
+        const result = restoreMCPConfig(ROOT_DIR);
+        if (result.success) {
+          console.log(`\n✅ ${result.message}`);
+          console.log("\n💡 Restart Claude Code to apply changes.");
+        } else {
+          console.error(`\n❌ ${result.message}`);
+          process.exit(1);
+        }
+        break;
+      }
+      case "wizard": {
+        // Run the profile wizard script
+        const wizardPath = join(ROOT_DIR, "scripts", "profile-wizard.js");
+        if (!existsSync(wizardPath)) {
+          console.error("Error: Profile wizard script not found");
+          process.exit(1);
+        }
+        try {
+          execSync(`node "${wizardPath}"`, { stdio: "inherit", cwd: ROOT_DIR });
+        } catch {
+          // Wizard handles its own errors
+          process.exit(1);
+        }
+        break;
+      }
+      case "status": {
+        const active = getActiveProfile(ROOT_DIR);
+        const servers = getConfiguredServers(ROOT_DIR);
+
+        console.log("\n📊 Profile Status\n");
+
+        if (active) {
+          const profile = getProfile(active.profileId);
+          console.log(`Active Profile: ${profile?.name || active.profileId}`);
+          console.log(`Activated: ${new Date(active.activatedAt).toLocaleString()}`);
+        } else {
+          console.log("Active Profile: None (using default .mcp.json)");
+        }
+
+        console.log(`\nConfigured MCP Servers (${servers.length}):`);
+        if (servers.length === 0) {
+          console.log("  (none)");
+        } else {
+          servers.forEach(s => console.log(`  - ${s}`));
+        }
+        console.log();
+        break;
+      }
+      default:
+        console.error(`Unknown profile command: ${subcommand}`);
+        console.log("Usage: ccplate profile [list|activate|reset|wizard|status]");
+        process.exit(1);
+    }
+  } else if (command === "handoff") {
+    switch (subcommand) {
+      case "create": {
+        const result = createHandoff(ROOT_DIR, { reason: "manual" });
+        if (result.success) {
+          console.log(`\n✅ ${result.message}`);
+          if (result.paths) {
+            console.log(`\n   📄 Markdown: ${result.paths.md}`);
+            console.log(`   📊 JSON: ${result.paths.json}`);
+          }
+          console.log("\n💡 Start a new session to continue from the handoff.");
+        } else {
+          console.error(`\n❌ ${result.message}`);
+          process.exit(1);
+        }
+        break;
+      }
+      case "show": {
+        if (!hasHandoff(ROOT_DIR)) {
+          console.log("\nNo handoff found.");
+          console.log("Run `ccplate handoff create` to create one.\n");
+          process.exit(0);
+        }
+
+        const state = loadHandoff(ROOT_DIR);
+        if (state) {
+          console.log(formatHandoff(state));
+
+          // Also show the markdown file path
+          console.log("\n📄 Full details: memory/HANDOFF.md\n");
+        } else {
+          console.error("Error: Could not load handoff state.");
+          process.exit(1);
+        }
+        break;
+      }
+      case "archive": {
+        if (!hasHandoff(ROOT_DIR)) {
+          console.log("\nNo handoff to archive.\n");
+          process.exit(0);
+        }
+
+        clearHandoff(ROOT_DIR);
+        console.log("\n✅ Handoff archived to memory/handoff-archive/\n");
+        break;
+      }
+      default:
+        console.error(`Unknown handoff command: ${subcommand}`);
+        console.log("Usage: ccplate handoff [create|show|archive]");
         process.exit(1);
     }
   } else {
