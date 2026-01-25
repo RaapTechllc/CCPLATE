@@ -374,7 +374,7 @@ export function updateWorkflowStateWithPRD(
 ): void {
   const statePath = join(rootDir, "memory", "workflow-state.json");
   let state: Record<string, unknown> = {};
-  
+
   if (existsSync(statePath)) {
     try {
       state = JSON.parse(readFileSync(statePath, "utf-8"));
@@ -388,4 +388,241 @@ export function updateWorkflowStateWithPRD(
   state.prd_frozen_at = metadata.createdAt;
 
   writeFileSync(statePath, JSON.stringify(state, null, 2) + "\n");
+}
+
+// ============================================================================
+// Progress Nudge - Keyword Extraction and File Relevance
+// ============================================================================
+
+/**
+ * Common stop words to filter out from keyword extraction
+ */
+const STOP_WORDS = new Set([
+  // Articles and determiners
+  "a", "an", "the",
+  // Be verbs
+  "is", "are", "was", "were", "be", "been", "being",
+  // Auxiliary verbs
+  "have", "has", "had", "do", "does", "did", "will", "would", "could",
+  "should", "may", "might", "must", "shall", "can", "need", "dare",
+  "ought",
+  // Prepositions
+  "to", "of", "in", "for", "on", "with", "at", "by", "from", "as",
+  "into", "through", "during", "before", "after", "above", "below",
+  "between", "under", "via",
+  // Adverbs
+  "again", "further", "then", "once", "here", "there", "when", "where",
+  "why", "how", "very", "just", "also", "now", "only", "already",
+  // Conjunctions
+  "and", "but", "if", "or", "because", "until", "while", "so", "yet",
+  // Pronouns (keep "user" - it's important for PRD context)
+  "it", "its", "this", "that", "these", "those",
+  "i", "me", "my", "myself", "we", "our", "ours", "ourselves",
+  "you", "your", "yours", "yourself", "yourselves",
+  "he", "him", "his", "himself", "she", "her", "hers", "herself",
+  "they", "them", "their", "theirs", "themselves",
+  "what", "which", "who", "whom",
+  // Quantifiers
+  "all", "each", "few", "more", "most", "other", "some", "such",
+  "any", "both", "no", "nor", "not", "own", "same", "than", "too",
+  // Generic verbs (that don't add meaning)
+  "using", "used",
+  // Common filler words
+  "etc", "flow",
+]);
+
+/**
+ * Whitelist patterns for files that are always considered relevant.
+ * These patterns use simple prefix/suffix matching, not full glob syntax.
+ */
+const DEFAULT_WHITELIST_PATTERNS = [
+  // Test files
+  ".test.ts",
+  ".test.tsx",
+  ".test.js",
+  ".test.jsx",
+  ".spec.ts",
+  ".spec.tsx",
+  ".spec.js",
+  ".spec.jsx",
+  "__tests__/",
+  "tests/",
+  "test/",
+  "e2e/",
+  // Memory and claude files
+  "memory/",
+  ".claude/",
+  // Config files
+  "package.json",
+  "tsconfig.json",
+  ".config.ts",
+  ".config.js",
+  ".config.json",
+  ".env",
+  "CLAUDE.md",
+  "ccplate.config.json",
+  "README.md",
+  "PLANNING.md",
+  "TASK.md",
+  // Prisma
+  "prisma/",
+];
+
+/**
+ * Extracts relevant keywords from PRD fields for file relevance matching.
+ * Keywords are extracted from:
+ * - criticalPaths
+ * - techStack (frontend, backend, database, auth, hosting)
+ * - jobsToBeDone
+ * - successCriteria
+ *
+ * @param prd - The PRD object or null
+ * @returns Array of lowercase, deduplicated keywords
+ */
+export function extractRelevantKeywords(prd: PRD | null): string[] {
+  if (!prd || !prd.answers) {
+    return [];
+  }
+
+  const rawTexts: string[] = [];
+  const { answers } = prd;
+
+  // Extract from criticalPaths
+  if (Array.isArray(answers.criticalPaths)) {
+    rawTexts.push(...answers.criticalPaths);
+  }
+
+  // Extract from techStack
+  if (answers.techStack) {
+    const { frontend, backend, database, auth, hosting } = answers.techStack;
+    if (frontend) rawTexts.push(frontend);
+    if (backend) rawTexts.push(backend);
+    if (database) rawTexts.push(database);
+    if (auth) rawTexts.push(auth);
+    if (hosting) rawTexts.push(hosting);
+  }
+
+  // Extract from jobsToBeDone
+  if (Array.isArray(answers.jobsToBeDone)) {
+    rawTexts.push(...answers.jobsToBeDone);
+  }
+
+  // Extract from successCriteria
+  if (Array.isArray(answers.successCriteria)) {
+    rawTexts.push(...answers.successCriteria);
+  }
+
+  // Tokenize and filter
+  const keywords = new Set<string>();
+
+  for (const text of rawTexts) {
+    if (!text || typeof text !== "string") continue;
+
+    // Split on whitespace and common delimiters
+    const tokens = text
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, " ") // Remove special chars except hyphen
+      .split(/[\s-]+/)
+      .filter((t) => t.length > 2) // Filter short tokens
+      .filter((t) => !STOP_WORDS.has(t)); // Filter stop words
+
+    for (const token of tokens) {
+      keywords.add(token);
+    }
+
+    // Also extract compound words (e.g., "NextAuth" -> "nextauth")
+    const compoundMatch = text.match(/[A-Z][a-z]+(?:[A-Z][a-z]+)+/g);
+    if (compoundMatch) {
+      for (const compound of compoundMatch) {
+        keywords.add(compound.toLowerCase());
+      }
+    }
+
+    // Extract tech names that might be one word (e.g., "Next.js" -> "next")
+    const techMatch = text.match(/\b[A-Z]?[a-z]+(?:\.[a-z]+)?\b/gi);
+    if (techMatch) {
+      for (const tech of techMatch) {
+        const cleaned = tech.replace(/\./g, "").toLowerCase();
+        if (cleaned.length > 2 && !STOP_WORDS.has(cleaned)) {
+          keywords.add(cleaned);
+        }
+      }
+    }
+  }
+
+  return Array.from(keywords);
+}
+
+/**
+ * Determines if a file path is relevant to the PRD scope.
+ *
+ * A file is considered relevant if:
+ * 1. It matches any of the provided keywords in its path
+ * 2. It matches a whitelist pattern (test files, config files, etc.)
+ *
+ * @param filePath - The file path to check
+ * @param keywords - Array of keywords from extractRelevantKeywords()
+ * @param customWhitelist - Additional whitelist patterns to check
+ * @returns true if the file is relevant, false otherwise
+ */
+export function isFileRelevant(
+  filePath: string,
+  keywords: string[],
+  customWhitelist: string[] = []
+): boolean {
+  if (!filePath || typeof filePath !== "string") {
+    return false;
+  }
+
+  // Normalize path separators for cross-platform support
+  const normalizedPath = filePath.replace(/\\/g, "/").toLowerCase();
+
+  // Check whitelist patterns first
+  const allWhitelistPatterns = [...DEFAULT_WHITELIST_PATTERNS, ...customWhitelist];
+
+  for (const pattern of allWhitelistPatterns) {
+    const normalizedPattern = pattern.toLowerCase();
+
+    // Check if pattern ends with "/" (directory prefix)
+    if (normalizedPattern.endsWith("/")) {
+      if (normalizedPath.includes(normalizedPattern) ||
+          normalizedPath.startsWith(normalizedPattern)) {
+        return true;
+      }
+    }
+    // Check if pattern starts with "." (extension or dotfile)
+    else if (normalizedPattern.startsWith(".")) {
+      // For .env pattern, match .env, .env.local, .env.production, etc.
+      if (normalizedPattern === ".env") {
+        const filename = normalizedPath.split("/").pop() || "";
+        if (filename === ".env" || filename.startsWith(".env.")) {
+          return true;
+        }
+      }
+      // Standard extension/dotfile matching
+      else if (normalizedPath.endsWith(normalizedPattern) ||
+          normalizedPath.includes("/" + normalizedPattern.slice(1))) {
+        return true;
+      }
+    }
+    // Exact filename match
+    else if (normalizedPath.endsWith("/" + normalizedPattern) ||
+             normalizedPath === normalizedPattern) {
+      return true;
+    }
+  }
+
+  // Check keywords
+  if (keywords.length === 0) {
+    return false;
+  }
+
+  for (const keyword of keywords) {
+    const normalizedKeyword = keyword.toLowerCase();
+    if (normalizedPath.includes(normalizedKeyword)) {
+      return true;
+    }
+  }
+
+  return false;
 }

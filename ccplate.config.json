@@ -12,7 +12,10 @@
         "enabled": true
       },
       "progress": {
-        "enabled": true
+        "enabled": true,
+        "sensitivity": 0.4,
+        "minFilesBeforeCheck": 3,
+        "whitelist": []
       },
       "context": {
         "enabled": true,

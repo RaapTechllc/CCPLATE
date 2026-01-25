@@ -1,24 +1,27 @@
 /**
  * CCPLATE Guardian Tick Hook
  * Evaluates workflow state after each tool use and emits nudges
- * 
+ *
  * Nudge types:
  * - commit: Too many files changed without commit
  * - test: New code without recent tests
+ * - progress: Working on files unrelated to PRD scope
  * - error: Errors detected in output
  * - context: Context pressure too high
  * - playwright: Playwright test failures blocking task completion
- * 
+ *
  * Features:
  * - Activity Narrator: Logs human-readable activity to memory/ACTIVITY.md
  * - Playwright Validation Loop: Blocks task completion until tests pass
- * 
+ * - Progress Nudge: Detects when agent is off-track from PRD scope
+ *
  * Exit codes:
  * - 0: Success (nudge may or may not be emitted)
  */
 
 import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync } from "fs";
 import { join, basename } from "path";
+import { loadPRD, extractRelevantKeywords, isFileRelevant } from "../../src/lib/guardian/prd";
 
 function ensureDir(dir: string): void {
   try {
@@ -43,6 +46,7 @@ interface WorkflowState {
   current_prp_step: number;
   total_prp_steps: number;
   files_changed: number;
+  recent_files_changed: string[];
   last_commit_time: string | null;
   last_test_time: string | null;
   context_pressure: number;
@@ -103,13 +107,20 @@ interface WatchdogConfig {
   blockWritesAtCritical: boolean;
 }
 
+interface ProgressNudgeConfig {
+  enabled: boolean;
+  sensitivity?: number;
+  minFilesBeforeCheck?: number;
+  whitelist?: string[];
+}
+
 interface GuardianConfig {
   guardian: {
     enabled: boolean;
     nudges: {
       commit: { enabled: boolean; filesThreshold: number; minutesThreshold: number };
       test: { enabled: boolean };
-      progress: { enabled: boolean };
+      progress: ProgressNudgeConfig;
       context: { enabled: boolean; threshold: number; watchdog?: WatchdogConfig };
       error: { enabled: boolean };
       playwright: { enabled: boolean };
@@ -715,6 +726,7 @@ function updateCooldown(
 function resetWorkflowStateForNewSession(state: WorkflowState, sessionId: string): void {
   state.session_id = sessionId;
   state.files_changed = 0;
+  state.recent_files_changed = [];
   state.last_commit_time = null;
   state.last_test_time = null;
   state.errors_detected = [];
@@ -767,9 +779,20 @@ function updateWorkflowStateFromTool(
   const toolOutput = input.tool_output || "";
 
   // Track file changes from Write/Edit tools
-  if (toolName === "Write" || toolName === "Edit" || 
+  if (toolName === "Write" || toolName === "Edit" ||
       toolName === "create_file" || toolName === "edit_file") {
     state.files_changed++;
+
+    // Track recent files for progress nudge
+    const filePath = (input.tool_input?.file_path as string) ||
+                     (input.tool_input?.path as string) || "";
+    if (filePath && !state.recent_files_changed.includes(filePath)) {
+      state.recent_files_changed.push(filePath);
+      // Keep only last 20 files
+      if (state.recent_files_changed.length > 20) {
+        state.recent_files_changed.shift();
+      }
+    }
   }
 
   // Track commits (improved regex matching)
@@ -780,6 +803,7 @@ function updateWorkflowStateFromTool(
     if (/\bgit\s+commit\b/.test(command)) {
       state.last_commit_time = new Date().toISOString();
       state.files_changed = 0; // Reset after commit
+      state.recent_files_changed = []; // Reset recent files tracking
     }
     
     // Match test commands more precisely
@@ -875,7 +899,51 @@ function evaluateNudges(
     }
   }
 
-  // 3. Error nudge - prefer LSP diagnostics over regex-based detection
+  // 3. Progress nudge - detect off-track work
+  if (
+    nudgeConfig.progress.enabled &&
+    !isMuted("progress") &&
+    !isOnCooldown(guardianState, "progress", config)
+  ) {
+    const progressConfig = nudgeConfig.progress;
+    const sensitivity = progressConfig.sensitivity ?? 0.4;
+    const minFiles = progressConfig.minFilesBeforeCheck ?? 3;
+    const customWhitelist = progressConfig.whitelist ?? [];
+    const recentFiles = workflowState.recent_files_changed || [];
+
+    // Only check if we have enough files
+    if (recentFiles.length >= minFiles) {
+      // Load PRD and extract keywords
+      const prd = loadPRD(PROJECT_DIR);
+      if (prd) {
+        const keywords = extractRelevantKeywords(prd);
+
+        // Count relevant files
+        let relevantCount = 0;
+        for (const file of recentFiles) {
+          if (isFileRelevant(file, keywords, customWhitelist)) {
+            relevantCount++;
+          }
+        }
+
+        const relevanceRatio = relevantCount / recentFiles.length;
+
+        // Check if below threshold
+        if (relevanceRatio < sensitivity) {
+          const relevancePercent = Math.round(relevanceRatio * 100);
+          const criticalPaths = prd.answers.criticalPaths || [];
+          const suggestedFocus = criticalPaths.slice(0, 2).join(", ") || "PRD scope";
+
+          return {
+            type: "progress",
+            message: `🚧 Possible off-track: ${relevancePercent}% of recent files (${relevantCount} of ${recentFiles.length}) relate to PRD scope. Focus areas: ${suggestedFocus}`,
+          };
+        }
+      }
+    }
+  }
+
+  // 4. Error nudge - prefer LSP diagnostics over regex-based detection
   if (
     nudgeConfig.error.enabled &&
     !isMuted("error") &&
@@ -905,7 +973,7 @@ function evaluateNudges(
     }
   }
 
-  // 4. Context pressure nudge (enhanced with watchdog)
+  // 5. Context pressure nudge (enhanced with watchdog)
   if (
     nudgeConfig.context.enabled &&
     !isMuted("context") &&
@@ -962,7 +1030,7 @@ function evaluateNudges(
     }
   }
 
-  // 5. Playwright validation nudge
+  // 6. Playwright validation nudge
   if (
     nudgeConfig.playwright.enabled &&
     !isMuted("playwright") &&
@@ -1079,6 +1147,7 @@ async function main(): Promise<void> {
     current_prp_step: 0,
     total_prp_steps: 0,
     files_changed: 0,
+    recent_files_changed: [],
     last_commit_time: null,
     last_test_time: null,
     context_pressure: 0,
