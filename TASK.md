@@ -78,10 +78,13 @@
 
 ### 🔧 Priority 4: Guardian Enhancements
 
-- [ ] **Wire progress nudge detection**
-  - [ ] Implement "off-topic" detection in guardian-tick.ts
-  - [ ] Compare current file changes to PRP steps
-  - [ ] UI toggle already exists
+- [x] **Wire progress nudge detection** ✅ (2026-01-25)
+  - [x] Implement "off-topic" detection in guardian-tick.ts
+  - [x] Compare current file changes to PRD keywords (criticalPaths, techStack)
+  - [x] UI toggle already exists
+  - [x] Added extractRelevantKeywords() and isFileRelevant() to prd.ts
+  - [x] Created progress-nudge.ts evaluation module
+  - [x] 65 unit tests added (all passing)
 
 - [x] **Add file upload magic byte validation** ✅ (2026-01-22)
   - [x] Install `file-type` package
