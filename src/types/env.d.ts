@@ -10,25 +10,26 @@ declare namespace NodeJS {
     /** PostgreSQL connection string */
     DATABASE_URL: string;
 
-    /** Secret key for NextAuth.js session encryption (min 32 chars) */
-    NEXTAUTH_SECRET: string;
+    /** Base URL for the site */
+    NEXT_PUBLIC_SITE_URL?: string;
 
-    /** Base URL for NextAuth.js callbacks */
-    NEXTAUTH_URL: string;
+    // Convex Auth - Google OAuth
+    /** Google OAuth client ID (Convex Auth) */
+    AUTH_GOOGLE_ID?: string;
 
-    // Optional OAuth variables - Google
-    /** Google OAuth client ID */
-    GOOGLE_CLIENT_ID?: string;
+    /** Google OAuth client secret (Convex Auth) */
+    AUTH_GOOGLE_SECRET?: string;
 
-    /** Google OAuth client secret */
-    GOOGLE_CLIENT_SECRET?: string;
+    // Convex Auth - GitHub OAuth
+    /** GitHub OAuth client ID (Convex Auth) */
+    AUTH_GITHUB_ID?: string;
 
-    // Optional OAuth variables - GitHub
-    /** GitHub OAuth client ID */
-    GITHUB_CLIENT_ID?: string;
+    /** GitHub OAuth client secret (Convex Auth) */
+    AUTH_GITHUB_SECRET?: string;
 
-    /** GitHub OAuth client secret */
-    GITHUB_CLIENT_SECRET?: string;
+    // Convex
+    /** Convex deployment URL */
+    NEXT_PUBLIC_CONVEX_URL?: string;
 
     // Node environment
     NODE_ENV: 'development' | 'production' | 'test';

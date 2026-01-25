@@ -9,7 +9,7 @@ const aiRateLimit = { interval: 60000, maxRequests: 10 };
 
 const RunAgentSchema = z.object({
   input: z.string().min(1, "Input is required"),
-  context: z.record(z.unknown()).optional(),
+  context: z.record(z.string(), z.unknown()).optional(),
 });
 
 interface RouteParams {

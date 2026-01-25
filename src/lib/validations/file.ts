@@ -9,7 +9,7 @@ import {
 export const fileUploadSchema = z.object({
   filename: z.string().min(1, "Filename is required"),
   mimeType: z.enum(ALLOWED_FILE_TYPES as unknown as [string, ...string[]], {
-    errorMap: () => ({ message: "File type not allowed" }),
+    message: "File type not allowed",
   }),
   size: z
     .number()
@@ -20,7 +20,7 @@ export const fileUploadSchema = z.object({
 // Avatar upload validation (more restrictive)
 export const avatarUploadSchema = z.object({
   mimeType: z.enum(["image/jpeg", "image/png", "image/webp"], {
-    errorMap: () => ({ message: "Avatar must be JPEG, PNG, or WebP" }),
+    message: "Avatar must be JPEG, PNG, or WebP",
   }),
   size: z
     .number()
@@ -37,7 +37,7 @@ export const fileListQuerySchema = z.object({
 
 // File ID validation
 export const fileIdSchema = z.object({
-  id: z.string().cuid("Invalid file ID"),
+  id: z.string().regex(/^c[a-z0-9]{24}$/, "Invalid file ID"),
 });
 
 // Types

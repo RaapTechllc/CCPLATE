@@ -23,7 +23,7 @@ export const userUpdateSchema = z.object({
 
 // User ID validation
 export const userIdSchema = z.object({
-  id: z.string().cuid("Invalid user ID"),
+  id: z.string().regex(/^c[a-z0-9]{24}$/, "Invalid user ID"),
 });
 
 // Setting update validation
@@ -48,7 +48,7 @@ export const settingKeySchema = z.object({
 
 // Impersonation validation
 export const impersonateSchema = z.object({
-  userId: z.string().cuid("Invalid user ID"),
+  userId: z.string().regex(/^c[a-z0-9]{24}$/, "Invalid user ID"),
 });
 
 // Types

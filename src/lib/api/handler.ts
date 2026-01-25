@@ -42,7 +42,7 @@ export function withErrorHandler(handler: RouteHandler): RouteHandler {
 
       // Handle Zod validation errors
       if (error instanceof ZodError) {
-        const message = error.errors
+        const message = error.issues
           .map((e) => `${e.path.join(".")}: ${e.message}`)
           .join(", ")
         return errorResponse("VALIDATION_ERROR", message, 400)
