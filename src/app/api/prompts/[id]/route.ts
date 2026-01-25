@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 import {
   getPrompt,
   updatePrompt,
@@ -35,8 +34,8 @@ const updatePromptSchema = z.object({
 });
 
 export async function GET(_request: NextRequest, context: RouteContext) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
+  const { authenticated } = await requireAuth();
+  if (!authenticated) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -58,8 +57,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 }
 
 export async function PUT(request: NextRequest, context: RouteContext) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
+  const { authenticated } = await requireAuth();
+  if (!authenticated) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -102,8 +101,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
+  const { authenticated } = await requireAuth();
+  if (!authenticated) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

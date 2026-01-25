@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import { z } from "zod";
-import { authOptions } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import {
   APISpecSchema,
   generateFiles,
@@ -22,12 +21,11 @@ function isValidBasePath(basePath: string): boolean {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
+  const { authenticated, user, isAdmin } = await requireAdmin();
+  if (!authenticated || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  if (session.user.role !== "ADMIN") {
+  if (!isAdmin) {
     return NextResponse.json({ error: "Admin access required" }, { status: 403 });
   }
 

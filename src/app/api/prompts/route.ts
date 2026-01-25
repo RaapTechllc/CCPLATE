@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 import { loadPrompts, createPrompt, type CreatePromptInput } from "@/lib/prompt-builder";
+import { rateLimit, apiRateLimit, getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 
 const createPromptSchema = z.object({
   name: z.string().min(1, "Name is required").max(100).trim(),
@@ -23,9 +23,16 @@ const createPromptSchema = z.object({
   notes: z.string().optional(),
 });
 
-export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session) {
+export async function GET(request: Request) {
+  // Apply rate limiting
+  const ip = getClientIp(request);
+  const limit = rateLimit(ip, apiRateLimit);
+  if (!limit.success) {
+    return rateLimitResponse(limit.reset - Date.now());
+  }
+
+  const { authenticated } = await requireAuth();
+  if (!authenticated) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -41,8 +48,15 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
+  // Apply rate limiting
+  const ip = getClientIp(request);
+  const limit = rateLimit(ip, apiRateLimit);
+  if (!limit.success) {
+    return rateLimitResponse(limit.reset - Date.now());
+  }
+
+  const { authenticated } = await requireAuth();
+  if (!authenticated) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

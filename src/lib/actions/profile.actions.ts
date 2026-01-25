@@ -2,39 +2,39 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { hashPassword, verifyPassword } from "@/lib/auth-utils";
 import { uploadFile } from "@/lib/services/file-service";
 
 const updateNameSchema = z.object({
   name: z.string().min(1, "Name is required").max(100, "Name is too long"),
 });
 
-const updatePasswordSchema = z.object({
-  currentPassword: z.string().min(1, "Current password is required"),
-  newPassword: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-    .regex(/[0-9]/, "Password must contain at least one number"),
-});
-
+/**
+ * Update the current user's display name.
+ */
 export async function updateNameAction(
   name: string
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
+    const { authenticated, user } = await requireAuth();
+    if (!authenticated || !user) {
       return { success: false, message: "You must be logged in." };
     }
 
     const validated = updateNameSchema.parse({ name });
 
+    // Find user by email (linking Convex user to Prisma user)
+    const prismaUser = await prisma.user.findFirst({
+      where: { email: user.email, deletedAt: null },
+    });
+
+    if (!prismaUser) {
+      return { success: false, message: "User not found." };
+    }
+
     await prisma.user.update({
-      where: { id: session.user.id },
+      where: { id: prismaUser.id },
       data: { name: validated.name },
     });
 
@@ -50,61 +50,29 @@ export async function updateNameAction(
   }
 }
 
+/**
+ * @deprecated Password updates are not available with OAuth-only authentication.
+ * Users should manage their passwords through their OAuth provider (Google, GitHub).
+ */
 export async function updatePasswordAction(
-  currentPassword: string,
-  newPassword: string
+  _currentPassword: string,
+  _newPassword: string
 ): Promise<{ success: boolean; message: string }> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { success: false, message: "You must be logged in." };
-    }
-
-    const validated = updatePasswordSchema.parse({ currentPassword, newPassword });
-
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-    });
-
-    if (!user) {
-      return { success: false, message: "User not found." };
-    }
-
-    if (!user.passwordHash) {
-      return {
-        success: false,
-        message: "Cannot change password for accounts using social login.",
-      };
-    }
-
-    const isValid = await verifyPassword(validated.currentPassword, user.passwordHash);
-    if (!isValid) {
-      return { success: false, message: "Current password is incorrect." };
-    }
-
-    const newPasswordHash = await hashPassword(validated.newPassword);
-
-    await prisma.user.update({
-      where: { id: session.user.id },
-      data: { passwordHash: newPasswordHash },
-    });
-
-    return { success: true, message: "Password updated successfully." };
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return { success: false, message: error.errors[0]?.message || "Invalid input" };
-    }
-    console.error("Update password error:", error);
-    return { success: false, message: "Failed to update password." };
-  }
+  return {
+    success: false,
+    message: "Password updates are not available. Please manage your password through your OAuth provider (Google, GitHub).",
+  };
 }
 
+/**
+ * Update the current user's avatar/profile image.
+ */
 export async function updateAvatarAction(
   formData: FormData
 ): Promise<{ success: boolean; message: string; imageUrl?: string }> {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
+    const { authenticated, user } = await requireAuth();
+    if (!authenticated || !user) {
       return { success: false, message: "You must be logged in." };
     }
 
@@ -126,18 +94,27 @@ export async function updateAvatarAction(
       return { success: false, message: "File is too large. Maximum size is 5MB." };
     }
 
+    // Find user by email (linking Convex user to Prisma user)
+    const prismaUser = await prisma.user.findFirst({
+      where: { email: user.email, deletedAt: null },
+    });
+
+    if (!prismaUser) {
+      return { success: false, message: "User not found." };
+    }
+
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
     const uploadedFile = await uploadFile(
-      session.user.id,
+      prismaUser.id,
       buffer,
       file.name,
       file.type
     );
 
     await prisma.user.update({
-      where: { id: session.user.id },
+      where: { id: prismaUser.id },
       data: { image: uploadedFile.url },
     });
 

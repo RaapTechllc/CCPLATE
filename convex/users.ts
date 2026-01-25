@@ -34,6 +34,17 @@ export const getUserById = query({
       throw new Error("Unauthorized");
     }
 
+    // Get current user to check permissions
+    const currentUser = await ctx.db.get(currentUserId);
+    if (!currentUser || currentUser.deletedAt) {
+      throw new Error("Unauthorized");
+    }
+
+    // Authorization: only self or admin can view user details
+    if (currentUserId !== userId && currentUser.role !== "ADMIN") {
+      return null;
+    }
+
     const user = await ctx.db.get(userId);
     if (!user || user.deletedAt) {
       return null;

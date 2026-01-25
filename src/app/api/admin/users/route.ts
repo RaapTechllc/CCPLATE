@@ -1,11 +1,11 @@
 import { NextRequest } from "next/server";
-import { getServerSession } from "next-auth";
 import { ZodError } from "zod";
-import { authOptions } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { ApiError } from "@/lib/api/errors";
 import { userListQuerySchema } from "@/lib/validations/admin";
 import { getUsers } from "@/lib/services/admin-service";
+import { rateLimit, adminRateLimit, getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 
 /**
  * Handle errors consistently across all route handlers
@@ -42,15 +42,20 @@ function handleError(error: unknown) {
  * List users with pagination, search, and filters (admin only)
  */
 export async function GET(request: NextRequest) {
+  // Apply rate limiting
+  const ip = getClientIp(request);
+  const limit = rateLimit(ip, adminRateLimit);
+  if (!limit.success) {
+    return rateLimitResponse(limit.reset - Date.now());
+  }
+
   try {
-    // Check authentication
-    const session = await getServerSession(authOptions);
-    if (!session) {
+    // Check authentication and admin role
+    const { authenticated, user, isAdmin } = await requireAdmin();
+    if (!authenticated || !user) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
-
-    // Check admin role
-    if (session.user.role !== "ADMIN") {
+    if (!isAdmin) {
       return errorResponse("FORBIDDEN", "Admin access required", 403);
     }
 

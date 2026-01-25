@@ -1,27 +1,23 @@
 "use server";
 
-import { z } from "zod";
-import { prisma } from "@/lib/db";
-import { hashPassword } from "@/lib/auth-utils";
-import { sendEmail } from "@/lib/email";
-import { generateResetPasswordEmail } from "@/lib/email/templates/reset-password";
-import { generateVerifyEmailTemplate } from "@/lib/email/templates/verify-email";
-import {
-  createPasswordResetToken,
-  validatePasswordResetToken,
-  markPasswordResetTokenUsed,
-  createEmailVerificationToken,
-  validateEmailVerificationToken,
-  deleteEmailVerificationToken,
-} from "@/lib/auth/tokens";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+/**
+ * Auth Actions - DEPRECATED
+ *
+ * This file contains server actions for authentication.
+ * Most password-related functions are deprecated since we use OAuth only.
+ *
+ * Password reset and email verification are no longer needed with OAuth providers
+ * as those providers handle authentication and email verification themselves.
+ */
 
-const forgotPasswordSchema = z.object({
+import { z } from "zod";
+
+// Schema kept for reference if password auth is re-enabled
+const _forgotPasswordSchema = z.object({
   email: z.string().email("Invalid email address"),
 });
 
-const resetPasswordSchema = z.object({
+const _resetPasswordSchema = z.object({
   token: z.string().min(1, "Token is required"),
   password: z
     .string()
@@ -31,169 +27,56 @@ const resetPasswordSchema = z.object({
     .regex(/[0-9]/, "Password must contain at least one number"),
 });
 
+/**
+ * @deprecated Password reset is not available with OAuth-only authentication.
+ * Users should use their OAuth provider's password reset functionality.
+ */
 export async function forgotPasswordAction(
-  email: string
+  _email: string
 ): Promise<{ success: boolean; message: string }> {
-  try {
-    const validated = forgotPasswordSchema.parse({ email });
-
-    const user = await prisma.user.findUnique({
-      where: { email: validated.email, deletedAt: null },
-    });
-
-    if (user) {
-      const rawToken = await createPasswordResetToken(user.id);
-      const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
-      const resetUrl = `${baseUrl}/reset-password/${rawToken}`;
-
-      const { html, text } = generateResetPasswordEmail({
-        resetUrl,
-        userName: user.name || undefined,
-      });
-
-      await sendEmail({
-        to: user.email,
-        subject: "Reset Your Password",
-        html,
-        text,
-      });
-    }
-
-    return {
-      success: true,
-      message: "If an account exists, you will receive a reset link.",
-    };
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return { success: false, message: error.errors[0]?.message || "Invalid input" };
-    }
-    console.error("Forgot password error:", error);
-    return {
-      success: true,
-      message: "If an account exists, you will receive a reset link.",
-    };
-  }
+  return {
+    success: false,
+    message: "Password reset is not available. Please use your OAuth provider (Google, GitHub) to manage your password.",
+  };
 }
 
+/**
+ * @deprecated Password reset is not available with OAuth-only authentication.
+ * Users should use their OAuth provider's password reset functionality.
+ */
 export async function resetPasswordAction(
-  token: string,
-  newPassword: string
+  _token: string,
+  _newPassword: string
 ): Promise<{ success: boolean; message: string }> {
-  try {
-    const validated = resetPasswordSchema.parse({ token, password: newPassword });
-
-    const user = await validatePasswordResetToken(validated.token);
-    if (!user) {
-      return {
-        success: false,
-        message: "Invalid or expired reset link. Please request a new one.",
-      };
-    }
-
-    const passwordHash = await hashPassword(validated.password);
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { passwordHash },
-    });
-
-    await markPasswordResetTokenUsed(validated.token);
-
-    return {
-      success: true,
-      message: "Password reset successfully. You can now log in.",
-    };
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return { success: false, message: error.errors[0]?.message || "Invalid input" };
-    }
-    console.error("Reset password error:", error);
-    return {
-      success: false,
-      message: "Failed to reset password. Please try again.",
-    };
-  }
+  return {
+    success: false,
+    message: "Password reset is not available. Please use your OAuth provider (Google, GitHub) to manage your password.",
+  };
 }
 
+/**
+ * @deprecated Email verification is handled by OAuth providers.
+ * OAuth providers (Google, GitHub) verify email addresses as part of their signup flow.
+ */
 export async function sendVerificationEmailAction(): Promise<{
   success: boolean;
   message: string;
 }> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { success: false, message: "You must be logged in." };
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-    });
-
-    if (!user) {
-      return { success: false, message: "User not found." };
-    }
-
-    if (user.emailVerified) {
-      return { success: false, message: "Email is already verified." };
-    }
-
-    const rawToken = await createEmailVerificationToken(user.id);
-    const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
-    const verifyUrl = `${baseUrl}/verify-email/${rawToken}`;
-
-    const { html, text } = generateVerifyEmailTemplate({
-      verifyUrl,
-      userName: user.name || undefined,
-    });
-
-    await sendEmail({
-      to: user.email,
-      subject: "Verify Your Email Address",
-      html,
-      text,
-    });
-
-    return {
-      success: true,
-      message: "Verification email sent. Please check your inbox.",
-    };
-  } catch (error) {
-    console.error("Send verification email error:", error);
-    return {
-      success: false,
-      message: "Failed to send verification email. Please try again.",
-    };
-  }
+  return {
+    success: false,
+    message: "Email verification is handled by your OAuth provider (Google, GitHub). No additional verification is needed.",
+  };
 }
 
+/**
+ * @deprecated Email verification is handled by OAuth providers.
+ * OAuth providers (Google, GitHub) verify email addresses as part of their signup flow.
+ */
 export async function verifyEmailAction(
-  token: string
+  _token: string
 ): Promise<{ success: boolean; message: string }> {
-  try {
-    const user = await validateEmailVerificationToken(token);
-    if (!user) {
-      return {
-        success: false,
-        message: "Invalid or expired verification link.",
-      };
-    }
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { emailVerified: new Date() },
-    });
-
-    await deleteEmailVerificationToken(user.id);
-
-    return {
-      success: true,
-      message: "Email verified successfully!",
-    };
-  } catch (error) {
-    console.error("Verify email error:", error);
-    return {
-      success: false,
-      message: "Failed to verify email. Please try again.",
-    };
-  }
+  return {
+    success: false,
+    message: "Email verification is handled by your OAuth provider (Google, GitHub). No additional verification is needed.",
+  };
 }

@@ -108,5 +108,32 @@ export function rateLimit(
 /** Rate limit config for authentication endpoints (5 requests per minute) */
 export const authRateLimit = { interval: 60000, maxRequests: 5 }
 
-/** Rate limit config for general API endpoints (30 requests per minute) */
-export const apiRateLimit = { interval: 60000, maxRequests: 30 }
+/** Rate limit config for admin endpoints (30 requests per minute) */
+export const adminRateLimit = { interval: 60000, maxRequests: 30 }
+
+/** Rate limit config for general API endpoints (60 requests per minute) */
+export const apiRateLimit = { interval: 60000, maxRequests: 60 }
+
+/**
+ * Get client IP from request headers
+ */
+export function getClientIp(request: Request): string {
+  return (
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") ||
+    "unknown"
+  )
+}
+
+/**
+ * Create a rate limit exceeded response
+ */
+export function rateLimitResponse(resetIn: number): Response {
+  return new Response("Too Many Requests", {
+    status: 429,
+    headers: {
+      "Retry-After": String(Math.ceil(resetIn / 1000)),
+      "Content-Type": "text/plain",
+    },
+  })
+}

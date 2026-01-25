@@ -1,6 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "crypto";
 import { PromptsFileSchema, type Prompt, type PromptVersion, type PromptVariable } from "./schema";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -76,7 +76,7 @@ export async function createPrompt(input: CreatePromptInput): Promise<Prompt> {
   const now = new Date();
 
   const initialVersion: PromptVersion = {
-    id: uuidv4(),
+    id: randomUUID(),
     version: 1,
     systemPrompt: input.systemPrompt,
     userPrompt: input.userPrompt,
@@ -89,7 +89,7 @@ export async function createPrompt(input: CreatePromptInput): Promise<Prompt> {
   };
 
   const newPrompt: Prompt = {
-    id: uuidv4(),
+    id: randomUUID(),
     name: input.name,
     description: input.description,
     category: input.category || "general",
@@ -144,7 +144,7 @@ export async function updatePrompt(
 
   if (hasContentChange && currentVersionData) {
     const newVersion: PromptVersion = {
-      id: uuidv4(),
+      id: randomUUID(),
       version: prompt.currentVersion + 1,
       systemPrompt: input.systemPrompt ?? currentVersionData.systemPrompt,
       userPrompt: input.userPrompt ?? currentVersionData.userPrompt,
@@ -203,7 +203,7 @@ export async function restoreVersion(
 
   const newVersion: PromptVersion = {
     ...versionToRestore,
-    id: uuidv4(),
+    id: randomUUID(),
     version: prompt.currentVersion + 1,
     createdAt: new Date(),
     notes: `Restored from version ${versionNumber}`,

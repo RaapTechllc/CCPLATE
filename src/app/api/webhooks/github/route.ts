@@ -49,29 +49,55 @@ const GUARDIAN_COMMANDS: Record<
 };
 
 /**
- * Verify GitHub webhook signature
+ * Verify GitHub webhook signature.
+ *
+ * SECURITY: In production, signature verification is mandatory.
+ * Set GITHUB_WEBHOOK_SECRET environment variable.
  */
 function verifySignature(
   payload: string,
   signature: string,
   secret: string
-): boolean {
-  if (!secret) return true; // Skip verification if no secret configured
+): { valid: boolean; error?: string } {
+  // In production, require webhook secret
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      return {
+        valid: false,
+        error: "GITHUB_WEBHOOK_SECRET not configured (required in production)",
+      };
+    }
+    // Development only: warn but allow
+    log.warn(
+      "Webhook signature verification skipped (GITHUB_WEBHOOK_SECRET not set). " +
+        "This is only allowed in development."
+    );
+    return { valid: true };
+  }
+
+  // Require signature header when secret is configured
+  if (!signature) {
+    return { valid: false, error: "Missing x-hub-signature-256 header" };
+  }
 
   try {
     const hmac = crypto.createHmac("sha256", secret);
     const digest = "sha256=" + hmac.update(payload).digest("hex");
 
     if (signature.length !== digest.length) {
-      return false;
+      return { valid: false, error: "Signature length mismatch" };
     }
 
-    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest));
+    const valid = crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(digest)
+    );
+    return valid ? { valid: true } : { valid: false, error: "Signature mismatch" };
   } catch (err) {
     log.error("Signature verification failed", {
       error: (err as Error).message,
     });
-    return false;
+    return { valid: false, error: "Signature verification error" };
   }
 }
 
@@ -203,11 +229,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Empty payload" }, { status: 400 });
     }
 
-    // Verify signature if secret is configured
+    // Verify webhook signature (mandatory in production)
     const secret = process.env.GITHUB_WEBHOOK_SECRET || "";
-    if (secret && !verifySignature(payload, signature, secret)) {
-      log.warn("Invalid webhook signature", { event });
-      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+    const signatureResult = verifySignature(payload, signature, secret);
+    if (!signatureResult.valid) {
+      log.warn("Webhook signature verification failed", {
+        event,
+        error: signatureResult.error,
+      });
+      return NextResponse.json(
+        { error: signatureResult.error || "Invalid signature" },
+        { status: 401 }
+      );
     }
 
     // Parse JSON payload

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import { z } from "zod";
-import { authOptions } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import {
   createStandardCRUDSpec,
   generateFiles,
@@ -32,16 +31,15 @@ const generateRequestSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
+  const { authenticated, user, isAdmin } = await requireAdmin();
+  if (!authenticated || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  if (session.user.role !== "ADMIN") {
+  if (!isAdmin) {
     return NextResponse.json({ error: "Admin access required" }, { status: 403 });
   }
 
-  const rateLimitResult = rateLimit(`api-builder:${session.user.id}`, aiRateLimit);
+  const rateLimitResult = rateLimit(`api-builder:${user._id}`, aiRateLimit);
   if (!rateLimitResult.success) {
     return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
   }
@@ -67,7 +65,7 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      
+
       const modelName = inferModelName(validated.description);
       spec = createStandardCRUDSpec(modelName, validated.basePath);
     }
@@ -104,10 +102,10 @@ export async function POST(request: NextRequest) {
 
 function inferModelName(description: string): string {
   const words = description.toLowerCase().split(/\s+/);
-  
+
   const resourceKeywords = ["for", "of", "manage", "managing", "create", "crud"];
   let foundIndex = -1;
-  
+
   for (const keyword of resourceKeywords) {
     const index = words.indexOf(keyword);
     if (index !== -1 && index < words.length - 1) {
@@ -115,24 +113,24 @@ function inferModelName(description: string): string {
       break;
     }
   }
-  
+
   if (foundIndex !== -1) {
     const resource = words[foundIndex + 1];
     const cleaned = resource.replace(/[^a-z]/g, "");
     const singular = cleaned.endsWith("s") ? cleaned.slice(0, -1) : cleaned;
     return singular.charAt(0).toUpperCase() + singular.slice(1);
   }
-  
-  const nouns = words.filter((w) => 
-    w.length > 3 && 
+
+  const nouns = words.filter((w) =>
+    w.length > 3 &&
     !["create", "crud", "api", "endpoint", "endpoints", "with", "the", "for", "and"].includes(w)
   );
-  
+
   if (nouns.length > 0) {
     const noun = nouns[0].replace(/[^a-z]/g, "");
     const singular = noun.endsWith("s") ? noun.slice(0, -1) : noun;
     return singular.charAt(0).toUpperCase() + singular.slice(1);
   }
-  
+
   return "Resource";
 }

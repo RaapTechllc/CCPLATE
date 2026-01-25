@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPrompt, testPrompt } from "@/lib/prompt-builder";
 import { rateLimit } from "@/lib/rate-limit";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 
 const aiRateLimit = { interval: 60000, maxRequests: 10 };
 
@@ -11,13 +10,12 @@ interface RouteContext {
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
+  const { authenticated, user } = await requireAuth();
+  if (!authenticated || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "anonymous";
-  const rateLimitResult = rateLimit(`prompt-test:${ip}`, aiRateLimit);
+  const rateLimitResult = rateLimit(`prompt-test:${user._id}`, aiRateLimit);
   if (!rateLimitResult.success) {
     return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
   }

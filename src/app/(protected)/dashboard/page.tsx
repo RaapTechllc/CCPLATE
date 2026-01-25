@@ -1,7 +1,11 @@
 import { Metadata } from "next";
 import Link from "next/link";
-import { requireAuth } from "@/lib/auth-utils";
+import { redirect } from "next/navigation";
+import { requireAuth } from "@/lib/auth";
 import { getDashboardStats, formatStorageSize } from "@/lib/dashboard/stats";
+
+// Force dynamic rendering - this page uses auth
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Dashboard | CCPLATE",
@@ -9,8 +13,13 @@ export const metadata: Metadata = {
 };
 
 export default async function DashboardPage() {
-  const user = await requireAuth();
-  const stats = await getDashboardStats(user.id);
+  const { authenticated, user } = await requireAuth();
+
+  if (!authenticated || !user) {
+    redirect("/login");
+  }
+
+  const stats = await getDashboardStats(user._id);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -39,9 +48,9 @@ export default async function DashboardPage() {
         <MemberSinceCard memberSince={stats.memberSince} />
         <StatCard
           title="Account Status"
-          value={user.emailVerified ? "Verified" : "Unverified"}
-          description={user.emailVerified ? "Email confirmed" : "Email pending"}
-          icon={user.emailVerified ? "✅" : "⚠️"}
+          value={user.emailVerificationTime ? "Verified" : "Unverified"}
+          description={user.emailVerificationTime ? "Email confirmed" : "Email pending"}
+          icon={user.emailVerificationTime ? "✅" : "⚠️"}
         />
       </div>
 

@@ -1,8 +1,12 @@
 import { Metadata } from "next";
-import { requireAuth } from "@/lib/auth-utils";
+import { redirect } from "next/navigation";
+import { requireAuth } from "@/lib/auth";
 import { getUserFiles } from "@/lib/services/file-service";
 import { FilesTable } from "@/components/features/files/files-table";
 import { FileUploadSection } from "@/components/features/files/file-upload-section";
+
+// Force dynamic rendering - this page uses auth
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Files | CCPLATE",
@@ -14,11 +18,16 @@ interface Props {
 }
 
 export default async function FilesPage({ searchParams }: Props) {
-  const user = await requireAuth();
+  const { authenticated, user } = await requireAuth();
+
+  if (!authenticated || !user) {
+    redirect("/login");
+  }
+
   const params = await searchParams;
   const page = parseInt(params.page || "1", 10);
 
-  const { files, pagination } = await getUserFiles(user.id, {
+  const { files, pagination } = await getUserFiles(user._id, {
     page,
     limit: 20,
   });

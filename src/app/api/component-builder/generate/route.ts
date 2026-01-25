@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import {
   generateComponentFromDescription,
   generateComponentFromSpec,
@@ -23,16 +22,15 @@ const GenerateRequestSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
+    const { authenticated, user, isAdmin } = await requireAdmin();
+    if (!authenticated || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    if (session.user?.role !== "ADMIN") {
+    if (!isAdmin) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
 
-    const rateLimitResult = rateLimit(`component-builder:${session.user?.id ?? "anonymous"}`, aiRateLimit);
+    const rateLimitResult = rateLimit(`component-builder:${user._id}`, aiRateLimit);
     if (!rateLimitResult.success) {
       return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
     }

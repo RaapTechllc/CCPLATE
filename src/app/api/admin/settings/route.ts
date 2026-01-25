@@ -1,12 +1,12 @@
 import { NextRequest } from "next/server";
-import { getServerSession } from "next-auth";
 import { ZodError } from "zod";
-import { authOptions } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { ApiError } from "@/lib/api/errors";
 import { bulkSettingsUpdateSchema } from "@/lib/validations/admin";
 import { getAll, getAllGrouped, bulkUpdate } from "@/lib/services/settings-service";
 import { logAuditEvent } from "@/lib/audit-log";
+import { rateLimit, adminRateLimit, getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 
 /**
  * Handle errors consistently across all route handlers
@@ -45,15 +45,20 @@ function handleError(error: unknown) {
  *   - grouped: if "true", returns settings grouped by category
  */
 export async function GET(request: NextRequest) {
+  // Apply rate limiting
+  const ip = getClientIp(request);
+  const limit = rateLimit(ip, adminRateLimit);
+  if (!limit.success) {
+    return rateLimitResponse(limit.reset - Date.now());
+  }
+
   try {
-    // Check authentication
-    const session = await getServerSession(authOptions);
-    if (!session) {
+    // Check authentication and admin role
+    const { authenticated, user, isAdmin } = await requireAdmin();
+    if (!authenticated || !user) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
-
-    // Check admin role
-    if (session.user.role !== "ADMIN") {
+    if (!isAdmin) {
       return errorResponse("FORBIDDEN", "Admin access required", 403);
     }
 
@@ -78,15 +83,20 @@ export async function GET(request: NextRequest) {
  * Bulk update settings (admin only)
  */
 export async function PUT(request: NextRequest) {
+  // Apply rate limiting
+  const ip = getClientIp(request);
+  const limit = rateLimit(ip, adminRateLimit);
+  if (!limit.success) {
+    return rateLimitResponse(limit.reset - Date.now());
+  }
+
   try {
-    // Check authentication
-    const session = await getServerSession(authOptions);
-    if (!session) {
+    // Check authentication and admin role
+    const { authenticated, user, isAdmin } = await requireAdmin();
+    if (!authenticated || !user) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
-
-    // Check admin role
-    if (session.user.role !== "ADMIN") {
+    if (!isAdmin) {
       return errorResponse("FORBIDDEN", "Admin access required", 403);
     }
 
@@ -123,8 +133,8 @@ export async function PUT(request: NextRequest) {
     if (Object.keys(changes).length > 0) {
       const ip = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined;
       logAuditEvent({
-        userId: session.user.id,
-        userEmail: session.user.email || "unknown",
+        userId: user._id,
+        userEmail: user.email || "unknown",
         action: "UPDATE",
         resource: "admin/settings",
         changes,

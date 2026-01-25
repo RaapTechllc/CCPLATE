@@ -4,8 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import {
   getFile,
@@ -28,8 +27,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
 
     // Check authentication
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
+    const { authenticated, user } = await requireAuth();
+    if (!authenticated || !user) {
       return NextResponse.json(
         { error: "Unauthorized", code: "UNAUTHORIZED" },
         { status: 401 }
@@ -53,7 +52,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       select: { userId: true },
     });
 
-    if (dbFile?.userId !== session.user.id && session.user.role !== "ADMIN") {
+    if (dbFile?.userId !== user._id && user.role !== "ADMIN") {
       return NextResponse.json(
         { error: "Forbidden", code: "FORBIDDEN" },
         { status: 403 }
@@ -86,8 +85,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
 
     // Check authentication
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
+    const { authenticated, user } = await requireAuth();
+    if (!authenticated || !user) {
       return NextResponse.json(
         { error: "Unauthorized", code: "UNAUTHORIZED" },
         { status: 401 }
@@ -114,8 +113,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const isOwner = file.userId === session.user.id;
-    const isAdmin = session.user.role === "ADMIN";
+    const isOwner = file.userId === user._id;
+    const isAdmin = user.role === "ADMIN";
 
     // Check permissions
     if (!isOwner && !isAdmin) {
@@ -136,9 +135,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     // User deleting their own file
     if (hardDelete) {
-      await deleteFile(id, session.user.id);
+      await deleteFile(id, user._id);
     } else {
-      await softDeleteFile(id, session.user.id);
+      await softDeleteFile(id, user._id);
     }
 
     return NextResponse.json({

@@ -57,8 +57,15 @@ function validateEnv(): Env {
         `Environment validation warning:\n${errorMessages}\n\n` +
           'Some environment variables are missing. Run `npx convex dev` to set up Convex.'
       );
-      // Return partial env for development
-      return result.data as Env;
+      // Return partial env for development - use raw values since validation failed
+      return {
+        CONVEX_DEPLOYMENT: process.env.CONVEX_DEPLOYMENT,
+        NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL ?? '',
+        AUTH_GOOGLE_ID: process.env.AUTH_GOOGLE_ID,
+        AUTH_GOOGLE_SECRET: process.env.AUTH_GOOGLE_SECRET,
+        AUTH_GITHUB_ID: process.env.AUTH_GITHUB_ID,
+        AUTH_GITHUB_SECRET: process.env.AUTH_GITHUB_SECRET,
+      } as Env;
     }
   }
 

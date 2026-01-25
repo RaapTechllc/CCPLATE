@@ -1,8 +1,7 @@
 import { NextRequest } from "next/server";
-import { getServerSession } from "next-auth";
 import { ZodError } from "zod";
 import { prisma } from "@/lib/db";
-import { authOptions } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { ApiError } from "@/lib/api/errors";
 import { paginationSchema } from "@/lib/validations/common";
@@ -43,14 +42,12 @@ function handleError(error: unknown) {
  */
 export async function GET(request: NextRequest) {
   try {
-    // Check authentication
-    const session = await getServerSession(authOptions);
-    if (!session) {
+    // Check authentication and admin role
+    const { authenticated, user, isAdmin } = await requireAdmin();
+    if (!authenticated || !user) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
-
-    // Check admin role
-    if (session.user.role !== "ADMIN") {
+    if (!isAdmin) {
       return errorResponse("FORBIDDEN", "Admin access required", 403);
     }
 

@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { cn } from "@/lib/utils";
 
 interface AdminHeaderProps {
@@ -24,6 +24,7 @@ const breadcrumbLabels: Record<string, string> = {
 
 export function AdminHeader({ user }: AdminHeaderProps) {
   const pathname = usePathname();
+  const { signOut } = useAuthActions();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -182,7 +183,7 @@ export function AdminHeader({ user }: AdminHeaderProps) {
               <button
                 onClick={() => {
                   setIsMenuOpen(false);
-                  signOut({ callbackUrl: "/" });
+                  signOut();
                 }}
                 className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-zinc-100 dark:text-red-400 dark:hover:bg-zinc-800"
               >

@@ -1,8 +1,7 @@
 import { NextRequest } from "next/server";
-import { getServerSession } from "next-auth";
 import { ZodError, z } from "zod";
 import { prisma } from "@/lib/db";
-import { authOptions } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { ApiError } from "@/lib/api/errors";
 
@@ -49,15 +48,16 @@ function handleError(error: unknown) {
  */
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
+    const { authenticated, user } = await requireAuth();
+    if (!authenticated || !user) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
 
-    // Fetch current user
-    const user = await prisma.user.findUnique({
+    // Fetch current user from Prisma using Convex user's email
+    // Note: In a full Convex migration, this would query Convex directly
+    const prismaUser = await prisma.user.findFirst({
       where: {
-        id: session.user.id,
+        email: user.email,
         deletedAt: null,
       },
       select: {
@@ -72,11 +72,18 @@ export async function GET() {
       },
     });
 
-    if (!user) {
-      return errorResponse("NOT_FOUND", "User not found", 404);
+    if (!prismaUser) {
+      // Return Convex user data if no Prisma user found
+      return successResponse({
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        image: user.image,
+        role: user.role,
+      });
     }
 
-    return successResponse(user);
+    return successResponse(prismaUser);
   } catch (error) {
     return handleError(error);
   }
@@ -88,8 +95,8 @@ export async function GET() {
  */
 export async function PATCH(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
+    const { authenticated, user } = await requireAuth();
+    if (!authenticated || !user) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
 
@@ -97,10 +104,10 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     const validatedData = updateProfileSchema.parse(body);
 
-    // Check if user exists
-    const existingUser = await prisma.user.findUnique({
+    // Find user by email
+    const existingUser = await prisma.user.findFirst({
       where: {
-        id: session.user.id,
+        email: user.email,
         deletedAt: null,
       },
     });
@@ -122,7 +129,7 @@ export async function PATCH(request: NextRequest) {
 
     // Update user
     const updatedUser = await prisma.user.update({
-      where: { id: session.user.id },
+      where: { id: existingUser.id },
       data: validatedData,
       select: {
         id: true,

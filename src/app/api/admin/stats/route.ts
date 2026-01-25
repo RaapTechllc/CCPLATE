@@ -1,6 +1,5 @@
-import { getServerSession } from "next-auth";
 import { ZodError } from "zod";
-import { authOptions } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { ApiError } from "@/lib/api/errors";
 import { getDashboardStats } from "@/lib/services/admin-service";
@@ -41,14 +40,12 @@ function handleError(error: unknown) {
  */
 export async function GET() {
   try {
-    // Check authentication
-    const session = await getServerSession(authOptions);
-    if (!session) {
+    // Check authentication and admin role
+    const { authenticated, user, isAdmin } = await requireAdmin();
+    if (!authenticated || !user) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
-
-    // Check admin role
-    if (session.user.role !== "ADMIN") {
+    if (!isAdmin) {
       return errorResponse("FORBIDDEN", "Admin access required", 403);
     }
 

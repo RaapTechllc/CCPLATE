@@ -1,7 +1,11 @@
 import { Metadata } from "next";
-import { requireAuth } from "@/lib/auth-utils";
+import { redirect } from "next/navigation";
+import { requireAuth } from "@/lib/auth";
 import { getWorktrees } from "./actions";
 import { WorktreesClient } from "./worktrees-client";
+
+// Force dynamic rendering - this page uses auth
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Worktrees | CCPLATE Guardian",
@@ -9,7 +13,12 @@ export const metadata: Metadata = {
 };
 
 export default async function WorktreesPage() {
-  await requireAuth();
+  const { authenticated } = await requireAuth();
+
+  if (!authenticated) {
+    redirect("/login");
+  }
+
   const worktrees = await getWorktrees();
 
   return (

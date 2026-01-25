@@ -4,8 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 import {
   uploadFile,
   uploadMultiple,
@@ -28,8 +27,8 @@ const uploadRateLimit = { interval: 60000, maxRequests: 20 };
 export async function POST(request: NextRequest) {
   try {
     // Check authentication
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
+    const { authenticated, user } = await requireAuth();
+    if (!authenticated || !user) {
       return NextResponse.json(
         { error: "Unauthorized", code: "UNAUTHORIZED" },
         { status: 401 }
@@ -37,11 +36,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Rate limit uploads per user
-    const rateLimitResult = rateLimit(`upload:${session.user.id}`, uploadRateLimit);
+    const rateLimitResult = rateLimit(`upload:${user._id}`, uploadRateLimit);
     if (!rateLimitResult.success) {
       return NextResponse.json(
         { error: "Upload rate limit exceeded. Please try again later.", code: "RATE_LIMITED" },
-        { 
+        {
           status: 429,
           headers: {
             "Retry-After": String(Math.ceil((rateLimitResult.reset - Date.now()) / 1000)),
@@ -64,7 +63,7 @@ export async function POST(request: NextRequest) {
       const buffer = Buffer.from(arrayBuffer);
 
       const result = await uploadFile(
-        session.user.id,
+        user._id,
         buffer,
         file.name,
         file.type || "application/octet-stream"
@@ -100,7 +99,7 @@ export async function POST(request: NextRequest) {
         });
 
       const fileData = await Promise.all(fileDataPromises);
-      const results = await uploadMultiple(session.user.id, fileData);
+      const results = await uploadMultiple(user._id, fileData);
 
       return NextResponse.json({ files: results }, { status: 201 });
     }
@@ -139,8 +138,8 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     // Check authentication
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
+    const { authenticated, user } = await requireAuth();
+    if (!authenticated || !user) {
       return NextResponse.json(
         { error: "Unauthorized", code: "UNAUTHORIZED" },
         { status: 401 }
@@ -169,7 +168,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user's files
-    const result = await getUserFiles(session.user.id, {
+    const result = await getUserFiles(user._id, {
       page,
       limit,
       mimeType,

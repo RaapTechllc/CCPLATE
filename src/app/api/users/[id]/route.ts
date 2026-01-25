@@ -1,8 +1,7 @@
 import { NextRequest } from "next/server";
-import { getServerSession } from "next-auth";
 import { ZodError, z } from "zod";
 import { prisma } from "@/lib/db";
-import { authOptions } from "@/lib/auth";
+import { requireAuth, requireAdmin } from "@/lib/auth";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { ApiError } from "@/lib/api/errors";
 import { idSchema } from "@/lib/validations/common";
@@ -58,8 +57,8 @@ export async function GET(
   context: RouteContext
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
+    const { authenticated, user } = await requireAuth();
+    if (!authenticated || !user) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
 
@@ -68,15 +67,15 @@ export async function GET(
     const userId = idSchema.parse(id);
 
     // Check authorization: must be self or admin
-    const isSelf = session.user.id === userId;
-    const isAdmin = session.user.role === "ADMIN";
+    const isSelf = user._id === userId;
+    const isAdmin = user.role === "ADMIN";
 
     if (!isSelf && !isAdmin) {
       return errorResponse("FORBIDDEN", "You can only view your own profile", 403);
     }
 
     // Fetch user
-    const user = await prisma.user.findUnique({
+    const targetUser = await prisma.user.findUnique({
       where: {
         id: userId,
         deletedAt: null,
@@ -93,11 +92,11 @@ export async function GET(
       },
     });
 
-    if (!user) {
+    if (!targetUser) {
       return errorResponse("NOT_FOUND", "User not found", 404);
     }
 
-    return successResponse(user);
+    return successResponse(targetUser);
   } catch (error) {
     return handleError(error);
   }
@@ -112,8 +111,8 @@ export async function PATCH(
   context: RouteContext
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
+    const { authenticated, user } = await requireAuth();
+    if (!authenticated || !user) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
 
@@ -122,8 +121,8 @@ export async function PATCH(
     const userId = idSchema.parse(id);
 
     // Check authorization
-    const isSelf = session.user.id === userId;
-    const isAdmin = session.user.role === "ADMIN";
+    const isSelf = user._id === userId;
+    const isAdmin = user.role === "ADMIN";
 
     if (!isSelf && !isAdmin) {
       return errorResponse("FORBIDDEN", "You can only update your own profile", 403);
@@ -192,13 +191,11 @@ export async function DELETE(
   context: RouteContext
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
+    const { authenticated, user, isAdmin } = await requireAdmin();
+    if (!authenticated || !user) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
-
-    // Admin only
-    if (session.user.role !== "ADMIN") {
+    if (!isAdmin) {
       return errorResponse("FORBIDDEN", "Admin access required", 403);
     }
 
@@ -207,19 +204,19 @@ export async function DELETE(
     const userId = idSchema.parse(id);
 
     // Check if user exists and is not already deleted
-    const user = await prisma.user.findUnique({
+    const targetUser = await prisma.user.findUnique({
       where: {
         id: userId,
         deletedAt: null,
       },
     });
 
-    if (!user) {
+    if (!targetUser) {
       return errorResponse("NOT_FOUND", "User not found", 404);
     }
 
     // Prevent admin from deleting themselves
-    if (session.user.id === userId) {
+    if (user._id === userId) {
       return errorResponse("FORBIDDEN", "You cannot delete your own account", 403);
     }
 
