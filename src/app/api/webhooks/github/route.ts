@@ -5,7 +5,7 @@ import { analyzeIssue } from "@/lib/guardian/labeling";
 import { createLogger } from "@/lib/guardian/logger";
 import {
   validatePositiveInteger,
-  validateOptionalPositiveInteger,
+  validateRepoName,
   ValidationError,
 } from "@/lib/guardian/security";
 
@@ -276,8 +276,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const repo = (data.repository as Record<string, unknown>)
-      ?.full_name as string;
+    // SECURITY: Validate repository name from external webhook payload
+    let repo: string;
+    try {
+      const rawRepo = (data.repository as Record<string, unknown>)?.full_name;
+      repo = validateRepoName(rawRepo, "repository.full_name");
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        log.warn("Invalid webhook payload: repository", {
+          event,
+          error: error.message,
+        });
+        return NextResponse.json(
+          { error: `Invalid repository: ${error.message}` },
+          { status: 400 }
+        );
+      }
+      throw error;
+    }
 
     // Handle issue and PR comments
     if (event === "issue_comment" || event === "pull_request_review_comment") {
