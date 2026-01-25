@@ -59,6 +59,8 @@ interface WorkflowState {
   playwright_blocked_tasks?: string[];
   fix_loop_active?: boolean;
   fix_loop_attempts?: number;
+  watchdog_blocking?: boolean;
+  watchdog_severity?: "normal" | "warning" | "orange" | "critical" | "force";
 }
 
 interface NudgeCooldown {
@@ -88,6 +90,19 @@ interface GuardianState {
   last_lsp_check?: string;
 }
 
+interface WatchdogThresholds {
+  warning: number;
+  orange: number;
+  critical: number;
+  forceHandoff: number;
+}
+
+interface WatchdogConfig {
+  enabled: boolean;
+  thresholds: WatchdogThresholds;
+  blockWritesAtCritical: boolean;
+}
+
 interface GuardianConfig {
   guardian: {
     enabled: boolean;
@@ -95,7 +110,7 @@ interface GuardianConfig {
       commit: { enabled: boolean; filesThreshold: number; minutesThreshold: number };
       test: { enabled: boolean };
       progress: { enabled: boolean };
-      context: { enabled: boolean; threshold: number };
+      context: { enabled: boolean; threshold: number; watchdog?: WatchdogConfig };
       error: { enabled: boolean };
       playwright: { enabled: boolean };
     };
@@ -155,6 +170,7 @@ const CONTEXT_LEDGER_PATH = join(MEMORY_DIR, "context-ledger.json");
 const ACTIVITY_LOG_PATH = join(MEMORY_DIR, "ACTIVITY.md");
 const NARRATOR_STATE_PATH = join(MEMORY_DIR, "narrator-state.json");
 const VALIDATION_STATE_PATH = join(MEMORY_DIR, "playwright-validation.json");
+const HANDOFF_PATH = join(MEMORY_DIR, "HANDOFF.md");
 
 function deepMerge<T extends object>(defaults: T, overrides: Partial<T>): T {
   const result = { ...defaults } as Record<string, unknown>;
@@ -479,6 +495,79 @@ function loadContextLedger(): ContextLedger {
   });
 }
 
+// ============================================================================
+// Context Watchdog
+// ============================================================================
+
+type WatchdogSeverity = "normal" | "warning" | "orange" | "critical" | "force";
+
+interface WatchdogEvaluation {
+  severity: WatchdogSeverity;
+  blocking: boolean;
+  message: string;
+}
+
+interface WatchdogStateData {
+  severity: WatchdogSeverity;
+  contextPressure: number;
+  blocking: boolean;
+  message: string;
+}
+
+const WATCHDOG_STATE_PATH = join(MEMORY_DIR, "watchdog-state.json");
+
+function evaluateContextWatchdog(
+  contextPressure: number,
+  config: WatchdogConfig
+): WatchdogEvaluation {
+  const { thresholds, blockWritesAtCritical } = config;
+
+  let severity: WatchdogSeverity = "normal";
+  let blocking = false;
+  let message = "";
+
+  const pct = Math.round(contextPressure * 100);
+
+  if (contextPressure >= thresholds.forceHandoff) {
+    severity = "force";
+    blocking = true;
+    message = `⛔ Context at ${pct}%! Auto-creating handoff...`;
+  } else if (contextPressure >= thresholds.critical) {
+    severity = "critical";
+    blocking = blockWritesAtCritical;
+    message = blocking
+      ? `🔴 Context at ${pct}%! Writes blocked. Run: ccplate handoff create`
+      : `🔴 Context at ${pct}%! Create a handoff soon.`;
+  } else if (contextPressure >= thresholds.orange) {
+    severity = "orange";
+    message = `🟠 Context at ${pct}%. Consider wrapping up.`;
+  } else if (contextPressure >= thresholds.warning) {
+    severity = "warning";
+    message = `🟡 Context at ${pct}%. Doing great!`;
+  }
+
+  return { severity, blocking, message };
+}
+
+function saveWatchdogState(state: WatchdogStateData): void {
+  try {
+    writeFileSync(WATCHDOG_STATE_PATH, JSON.stringify(state, null, 2) + "\n");
+  } catch {
+    // Silently fail
+  }
+}
+
+function loadWatchdogState(): WatchdogStateData | null {
+  try {
+    if (existsSync(WATCHDOG_STATE_PATH)) {
+      return JSON.parse(readFileSync(WATCHDOG_STATE_PATH, "utf-8"));
+    }
+  } catch {
+    // Ignore
+  }
+  return null;
+}
+
 function calculateContextPressure(ledger: ContextLedger, toolUses: number): number {
   const consultations = ledger.consultations.length;
   
@@ -632,6 +721,35 @@ function resetWorkflowStateForNewSession(state: WorkflowState, sessionId: string
   state.current_prp_step = 0;
   state.total_prp_steps = 0;
   state.context_pressure = 0;
+  state.watchdog_blocking = false;
+  state.watchdog_severity = "normal";
+}
+
+/**
+ * Check for existing handoff on session start
+ */
+function checkForHandoff(): string | null {
+  if (!existsSync(HANDOFF_PATH)) {
+    return null;
+  }
+
+  try {
+    const handoffJsonPath = join(MEMORY_DIR, "handoff-state.json");
+    if (existsSync(handoffJsonPath)) {
+      const state = JSON.parse(readFileSync(handoffJsonPath, "utf-8"));
+      const pct = Math.round((state.metadata?.contextPressure || 0) * 100);
+      const reason = state.metadata?.reason || "unknown";
+      const task = state.currentTask?.description || "ongoing work";
+
+      return `📋 HANDOFF DETECTED (${reason}, ${pct}% context)
+   Task: ${task}
+   Read: memory/HANDOFF.md to continue`;
+    }
+
+    return `📋 HANDOFF DETECTED - Read memory/HANDOFF.md to continue`;
+  } catch {
+    return `📋 HANDOFF DETECTED - Read memory/HANDOFF.md to continue`;
+  }
 }
 
 function updateWorkflowStateFromTool(
@@ -787,15 +905,54 @@ function evaluateNudges(
     }
   }
 
-  // 4. Context pressure nudge
+  // 4. Context pressure nudge (enhanced with watchdog)
   if (
     nudgeConfig.context.enabled &&
     !isMuted("context") &&
     !isOnCooldown(guardianState, "context", config)
   ) {
-    if (workflowState.context_pressure >= nudgeConfig.context.threshold) {
+    const watchdogConfig = nudgeConfig.context.watchdog;
+
+    // Use watchdog if enabled, otherwise fall back to simple threshold
+    if (watchdogConfig?.enabled && workflowState.watchdog_severity) {
+      const severity = workflowState.watchdog_severity;
       const pct = Math.round(workflowState.context_pressure * 100);
-      const suggestion = pct >= 85 
+
+      // Only nudge for warning and above
+      if (severity !== "normal") {
+        let emoji = "🟡";
+        let suggestion = "";
+
+        switch (severity) {
+          case "warning":
+            emoji = "🟡";
+            suggestion = "Continue working, context looks good.";
+            break;
+          case "orange":
+            emoji = "🟠";
+            suggestion = "Good time to checkpoint or prepare a handoff.";
+            break;
+          case "critical":
+            emoji = "🔴";
+            suggestion = workflowState.watchdog_blocking
+              ? "Write operations paused. Run: ccplate handoff create"
+              : "Run: ccplate handoff create";
+            break;
+          case "force":
+            emoji = "⛔";
+            suggestion = "Auto-creating handoff. Session will transfer.";
+            break;
+        }
+
+        return {
+          type: "context",
+          message: `${emoji} Context at ${pct}%. ${suggestion}`,
+        };
+      }
+    } else if (workflowState.context_pressure >= nudgeConfig.context.threshold) {
+      // Fallback to simple threshold
+      const pct = Math.round(workflowState.context_pressure * 100);
+      const suggestion = pct >= 85
         ? " Use Handoff tool to pass context to a fresh session."
         : "";
       return {
@@ -946,12 +1103,46 @@ async function main(): Promise<void> {
   // Update workflow state based on tool
   updateWorkflowStateFromTool(workflowState, input);
 
+  // ========================================================================
+  // Handoff Detection - Check for existing handoff on first tool use
+  // ========================================================================
+  if (guardianState.total_tool_uses === 1) {
+    const handoffMessage = checkForHandoff();
+    if (handoffMessage) {
+      console.error("\n" + "=".repeat(50));
+      console.error(handoffMessage);
+      console.error("=".repeat(50) + "\n");
+    }
+  }
+
   // Calculate context pressure from ledger and tool uses
   const contextLedger = loadContextLedger();
   workflowState.context_pressure = calculateContextPressure(
     contextLedger,
     guardianState.total_tool_uses
   );
+
+  // ========================================================================
+  // Context Watchdog - Evaluate escalation level
+  // ========================================================================
+  const watchdogConfig = config.guardian.nudges.context?.watchdog;
+  if (watchdogConfig?.enabled) {
+    const evaluation = evaluateContextWatchdog(
+      workflowState.context_pressure,
+      watchdogConfig
+    );
+
+    workflowState.watchdog_blocking = evaluation.blocking;
+    workflowState.watchdog_severity = evaluation.severity;
+
+    // Save watchdog state for path-guard to read
+    saveWatchdogState({
+      severity: evaluation.severity,
+      contextPressure: workflowState.context_pressure,
+      blocking: evaluation.blocking,
+      message: evaluation.message,
+    });
+  }
 
   // ========================================================================
   // Activity Narrator - Log significant tool uses

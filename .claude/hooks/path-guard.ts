@@ -10,9 +10,10 @@
  */
 
 import * as path from "path";
-import { appendFileSync, existsSync, mkdirSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 
 const MEMORY_DIR = path.join(process.env.CLAUDE_PROJECT_DIR || ".", "memory");
+const WATCHDOG_STATE_PATH = path.join(MEMORY_DIR, "watchdog-state.json");
 
 function ensureDir(dir: string): void {
   try {
@@ -227,6 +228,43 @@ function getAssignedWorktree(): string | null {
   return process.env.CCPLATE_WORKTREE || null;
 }
 
+/**
+ * Watchdog state interface
+ */
+interface WatchdogState {
+  severity: "normal" | "warning" | "orange" | "critical" | "force";
+  contextPressure: number;
+  blocking: boolean;
+  message: string;
+}
+
+/**
+ * Check if context watchdog is blocking writes
+ */
+function isWatchdogBlocking(): { blocking: boolean; message: string } {
+  try {
+    if (!existsSync(WATCHDOG_STATE_PATH)) {
+      return { blocking: false, message: "" };
+    }
+
+    const state: WatchdogState = JSON.parse(
+      readFileSync(WATCHDOG_STATE_PATH, "utf-8")
+    );
+
+    if (state.blocking) {
+      const pct = Math.round(state.contextPressure * 100);
+      return {
+        blocking: true,
+        message: `Context at ${pct}%! Write operations paused. Run: ccplate handoff create`,
+      };
+    }
+
+    return { blocking: false, message: "" };
+  } catch {
+    return { blocking: false, message: "" };
+  }
+}
+
 function checkNeverWrite(filePath: string, cwd: string): string | null {
   // Skip check if path is always allowed (with traversal protection)
   if (isAlwaysAllowed(filePath, cwd)) {
@@ -317,6 +355,32 @@ async function main(): Promise<void> {
     const response: AllowResponse = { decision: "approve" };
     console.log(JSON.stringify(response));
     process.exit(0);
+  }
+
+  // Check context watchdog blocking FIRST (before other checks)
+  const watchdogCheck = isWatchdogBlocking();
+  if (watchdogCheck.blocking) {
+    // Allow writes to memory/ even when watchdog is blocking
+    // (needed for handoff creation)
+    const filePath = (input.tool_input?.file_path as string) ||
+                     (input.tool_input?.path as string) ||
+                     "";
+    const normalizedPath = filePath.replace(/\\/g, "/");
+
+    // Allow memory/, handoff files, and watchdog state
+    const allowedPaths = ["memory/", "HANDOFF.md", "handoff-state.json", "watchdog-state.json"];
+    const isAllowed = allowedPaths.some(p =>
+      normalizedPath.includes(p) || normalizedPath.endsWith(p)
+    );
+
+    if (!isAllowed) {
+      const response: BlockResponse = {
+        decision: "block",
+        reason: `BLOCKED: ${watchdogCheck.message}`,
+      };
+      console.log(JSON.stringify(response));
+      process.exit(2);
+    }
   }
   
   // Get the file path from tool input

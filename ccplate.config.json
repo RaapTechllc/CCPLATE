@@ -16,7 +16,17 @@
       },
       "context": {
         "enabled": true,
-        "threshold": 0.8
+        "threshold": 0.8,
+        "watchdog": {
+          "enabled": true,
+          "thresholds": {
+            "warning": 0.5,
+            "orange": 0.7,
+            "critical": 0.85,
+            "forceHandoff": 0.95
+          },
+          "blockWritesAtCritical": true
+        }
       },
       "error": {
         "enabled": true

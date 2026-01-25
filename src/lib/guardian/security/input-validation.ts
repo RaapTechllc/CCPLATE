@@ -54,8 +54,9 @@ const GIT_BRANCH_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._\/-]{0,254}$/;
 
 /**
  * Shell metacharacters that could enable command injection
+ * Includes Windows-specific % for environment variable expansion
  */
-const SHELL_METACHARACTERS = /[;&|`$(){}[\]<>\\!#*?"'\n\r\t]/;
+const SHELL_METACHARACTERS = /[;&|`$(){}[\]<>\\!#*?"'\n\r\t%]/;
 
 /**
  * Validates that a value is a positive integer within bounds
@@ -391,10 +392,17 @@ export function validatePath(
     );
   }
 
-  // Check for directory traversal
-  if (value.includes('..')) {
+  // Check for directory traversal (including URL-encoded variants)
+  // %2e = '.', %2f = '/', %5c = '\'
+  const decodedValue = value.toLowerCase();
+  if (
+    value.includes('..') ||
+    decodedValue.includes('%2e%2e') ||
+    decodedValue.includes('%2e.') ||
+    decodedValue.includes('.%2e')
+  ) {
     throw new ValidationError(
-      `${fieldName} contains directory traversal sequence (..)`,
+      `${fieldName} contains directory traversal sequence`,
       fieldName,
       value
     );
@@ -414,6 +422,14 @@ export function validatePath(
     if (/^[A-Za-z]:[\\/]/.test(value)) {
       throw new ValidationError(
         `${fieldName} must be a relative path`,
+        fieldName,
+        value
+      );
+    }
+    // UNC path (\\server\share or //server/share)
+    if (value.startsWith('\\\\') || value.startsWith('//')) {
+      throw new ValidationError(
+        `${fieldName} must be a relative path (UNC paths not allowed)`,
         fieldName,
         value
       );

@@ -1,11 +1,5 @@
 {
-  "cooldowns": [
-    {
-      "type": "context",
-      "last_triggered": "2026-01-22T19:07:58.271Z",
-      "tool_uses_since": 1
-    }
-  ],
-  "total_tool_uses": 1,
+  "cooldowns": [],
+  "total_tool_uses": 0,
   "muted_nudges": []
 }
