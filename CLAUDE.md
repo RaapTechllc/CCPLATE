@@ -170,6 +170,13 @@ ccplate audit categories          # List audit categories
 ccplate hook generate <desc>      # Generate hook code
 ccplate component generate <desc> # Generate React component
 ccplate api generate <desc>       # Generate API endpoint
+
+# Vercel Deployment
+ccplate deploy                    # Deploy to Vercel (preview)
+ccplate deploy --prod             # Deploy to production
+ccplate deploy status <id>        # Check deployment status
+ccplate deploy list               # List recent deployments
+ccplate deploy validate           # Validate Vercel credentials
 ```
 
 ## Tech Stack
@@ -230,6 +237,7 @@ Located in `src/lib/guardian/`:
 | `merge-ledger.ts` | Merge | Merge history and rollback |
 | `audit-log.ts` | Audit | Audit trail logging |
 | `error-log.ts` | Error | Standardized error logging |
+| `vercel-deploy.ts` | Deploy | Vercel deployment with claimable URLs |
 | `logger.ts` | Parallel | Structured JSONL logging |
 | `labeling.ts` | Parallel | Area-based issue labeling |
 | `merge-resolver.ts` | Parallel | Auto merge conflict resolution |
@@ -270,6 +278,9 @@ Located in `.claude/skills/`:
 | `backend-patterns` | API, database, caching patterns | `/skill backend-patterns` |
 | `frontend-patterns` | React, state, performance patterns | `/skill frontend-patterns` |
 | `continuous-learning` | Auto-extract patterns from sessions | Runs as Stop hook |
+| `vercel-deploy` | Deploy to Vercel with claimable ownership | `/skill vercel-deploy` |
+| `vercel-react-best-practices` | Next.js App Router, RSC, Vercel optimizations | `/skill vercel-react-best-practices` |
+| `web-design-guidelines` | WCAG 2.1 AA, accessibility, responsive design | `/skill web-design-guidelines` |
 
 ### Rules
 

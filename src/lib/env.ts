@@ -18,6 +18,10 @@ const envSchema = z.object({
   // OAuth - GitHub (set in Convex dashboard)
   AUTH_GITHUB_ID: z.string().optional(),
   AUTH_GITHUB_SECRET: z.string().optional(),
+
+  // Vercel Deployment (optional)
+  VERCEL_API_TOKEN: z.string().optional(),
+  VERCEL_TEAM_ID: z.string().optional(),
 });
 
 /**
@@ -38,6 +42,8 @@ function validateEnv(): Env {
     AUTH_GOOGLE_SECRET: process.env.AUTH_GOOGLE_SECRET,
     AUTH_GITHUB_ID: process.env.AUTH_GITHUB_ID,
     AUTH_GITHUB_SECRET: process.env.AUTH_GITHUB_SECRET,
+    VERCEL_API_TOKEN: process.env.VERCEL_API_TOKEN,
+    VERCEL_TEAM_ID: process.env.VERCEL_TEAM_ID,
   });
 
   if (!result.success) {
@@ -65,6 +71,8 @@ function validateEnv(): Env {
         AUTH_GOOGLE_SECRET: process.env.AUTH_GOOGLE_SECRET,
         AUTH_GITHUB_ID: process.env.AUTH_GITHUB_ID,
         AUTH_GITHUB_SECRET: process.env.AUTH_GITHUB_SECRET,
+        VERCEL_API_TOKEN: process.env.VERCEL_API_TOKEN,
+        VERCEL_TEAM_ID: process.env.VERCEL_TEAM_ID,
       } as Env;
     }
   }

@@ -33,5 +33,12 @@ declare namespace NodeJS {
 
     // Node environment
     NODE_ENV: 'development' | 'production' | 'test';
+
+    // Vercel Deployment
+    /** Vercel API token for deployments */
+    VERCEL_API_TOKEN?: string;
+
+    /** Vercel team ID for team deployments */
+    VERCEL_TEAM_ID?: string;
   }
 }

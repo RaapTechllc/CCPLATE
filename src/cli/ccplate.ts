@@ -94,6 +94,16 @@ import {
   clearHandoff,
   formatHandoff,
 } from "../lib/guardian/handoff";
+import {
+  deployToVercel,
+  getDeploymentStatus,
+  listDeployments,
+  validateVercelCredentials,
+  formatCredentialValidation,
+  formatDeploymentList,
+  parseDeployEnv,
+  parseProjectName,
+} from "../lib/guardian/vercel-deploy";
 
 const ROOT_DIR = resolve(import.meta.dir, "../..");
 const CONFIG_PATH = join(ROOT_DIR, "ccplate.config.json");
@@ -1016,6 +1026,11 @@ Usage:
   ccplate audit list [--category type] [--limit N] [--since Nm]  Show audit log
   ccplate audit categories                        List available audit categories
 
+  ccplate deploy [--prod] [--name <name>]         Deploy to Vercel
+  ccplate deploy status <deployment-id>           Check deployment status
+  ccplate deploy list [--limit N]                 List recent deployments
+  ccplate deploy validate                         Validate Vercel credentials
+
 Examples:
   ccplate status                              # Unified dashboard
 
@@ -1059,6 +1074,12 @@ Examples:
   ccplate handoff create                    # Create session handoff
   ccplate handoff show                      # View current handoff
   ccplate handoff archive                   # Archive without using
+
+  ccplate deploy                            # Deploy to preview
+  ccplate deploy --prod                     # Deploy to production
+  ccplate deploy status abc123              # Check deployment status
+  ccplate deploy list                       # List recent deployments
+  ccplate deploy validate                   # Check credentials
 
 Options:
   --help, -h    Show this help message
@@ -2149,6 +2170,85 @@ async function main(): Promise<void> {
         console.error(`Unknown handoff command: ${subcommand}`);
         console.log("Usage: ccplate handoff [create|show|archive]");
         process.exit(1);
+    }
+  } else if (command === "deploy") {
+    switch (subcommand) {
+      case "validate": {
+        const result = validateVercelCredentials(ROOT_DIR);
+        console.log("\n" + formatCredentialValidation(result) + "\n");
+        process.exit(result.valid ? 0 : 1);
+        break;
+      }
+      case "status": {
+        if (!taskId) {
+          console.error("Error: Missing deployment ID");
+          console.error("Usage: ccplate deploy status <deployment-id>");
+          process.exit(1);
+        }
+        const status = getDeploymentStatus(taskId, ROOT_DIR);
+        if (!status) {
+          console.error(`Deployment not found: ${taskId}`);
+          process.exit(1);
+        }
+        console.log("\nDeployment Status");
+        console.log("─".repeat(40));
+        console.log(`ID: ${status.id}`);
+        console.log(`State: ${status.state}`);
+        if (status.url) console.log(`URL: ${status.url}`);
+        console.log(`Created: ${status.createdAt}`);
+        if (status.readyAt) console.log(`Ready: ${status.readyAt}`);
+        if (status.errorMessage) console.log(`Error: ${status.errorMessage}`);
+        console.log();
+        break;
+      }
+      case "list": {
+        const limitIdx = args.indexOf("--limit");
+        const limit = limitIdx !== -1 ? parseInt(args[limitIdx + 1], 10) : 10;
+        const records = listDeployments(ROOT_DIR, { limit });
+        console.log("\n" + formatDeploymentList(records));
+        break;
+      }
+      default: {
+        // Default: deploy to Vercel
+        const env = parseDeployEnv(args);
+        const projectName = parseProjectName(args);
+        const force = args.includes("--force");
+
+        console.log(`\n🚀 Deploying to Vercel (${env})...\n`);
+
+        // Validate first
+        const validation = validateVercelCredentials(ROOT_DIR);
+        if (!validation.valid) {
+          console.log(formatCredentialValidation(validation));
+          process.exit(1);
+        }
+
+        const result = deployToVercel({
+          rootDir: ROOT_DIR,
+          env,
+          projectName,
+          force,
+        });
+
+        if (result.success) {
+          console.log("✅ Deployment successful!\n");
+          if (result.deploymentUrl) {
+            console.log(`   URL: ${result.deploymentUrl}`);
+          }
+          if (result.deploymentId) {
+            console.log(`   ID: ${result.deploymentId}`);
+          }
+          console.log();
+        } else {
+          console.error(`❌ Deployment failed: ${result.error}\n`);
+          if (result.logs) {
+            console.log("Logs:");
+            console.log(result.logs);
+          }
+          process.exit(1);
+        }
+        break;
+      }
     }
   } else {
     console.error(`Unknown command: ${command}`);
