@@ -53,6 +53,14 @@ const GIT_HASH_PATTERN = /^[0-9a-f]{7,40}$/;
 const GIT_BRANCH_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._\/-]{0,254}$/;
 
 /**
+ * Pattern for GitHub repository full names (owner/repo)
+ * - owner and repo can contain alphanumeric, hyphens, underscores, dots
+ * - Cannot start with hyphen
+ * - Max 100 characters each (approximate)
+ */
+const GITHUB_REPO_PATTERN = /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/;
+
+/**
  * Shell metacharacters that could enable command injection
  * Includes Windows-specific % for environment variable expansion
  */
@@ -434,6 +442,51 @@ export function validatePath(
         value
       );
     }
+  }
+
+  return value;
+}
+
+/**
+ * Validates a GitHub repository full name (owner/repo)
+ *
+ * @param value - The value to validate
+ * @param fieldName - Name of the field for error messages
+ * @returns The validated repository name
+ * @throws ValidationError if validation fails
+ */
+export function validateRepoName(value: unknown, fieldName: string): string {
+  if (value === undefined || value === null) {
+    throw new ValidationError(
+      `${fieldName} is required`,
+      fieldName,
+      value
+    );
+  }
+
+  if (typeof value !== 'string') {
+    throw new ValidationError(
+      `${fieldName} must be a string`,
+      fieldName,
+      value
+    );
+  }
+
+  if (!GITHUB_REPO_PATTERN.test(value)) {
+    throw new ValidationError(
+      `${fieldName} must be a valid GitHub repository name (owner/repo)`,
+      fieldName,
+      value
+    );
+  }
+
+  // Check for shell metacharacters
+  if (SHELL_METACHARACTERS.test(value)) {
+    throw new ValidationError(
+      `${fieldName} contains shell metacharacters`,
+      fieldName,
+      value
+    );
   }
 
   return value;
