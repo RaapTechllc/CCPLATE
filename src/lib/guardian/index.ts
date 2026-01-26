@@ -203,3 +203,168 @@ export {
   type ConflictAnalysis,
   type ResolutionResult,
 } from './merge-resolver';
+
+// Workflow Tiers
+export {
+  getTierConfig,
+  getTierInfo,
+  TIER_SELECTION_QUESTION,
+  type WorkflowTier,
+  type TierConfig,
+  type TierQuestion,
+  type TierQuestionOption,
+  type TierNudgeConfig,
+  type TierHITLConfig,
+  type TierAutoResolveConfig,
+  type ContextThresholds,
+  type HITLRequirement,
+  type NudgeType,
+} from './tiers';
+
+// Beginner tier (enhanced)
+export {
+  BEGINNER_CONFIG,
+  BEGINNER_ENHANCED_CONFIG,
+  BEGINNER_QUESTIONS,
+  BEGINNER_CONDITIONAL_QUESTIONS,
+  BEGINNER_PHASES,
+  getApplicableQuestions,
+  deriveBeginnerPRD,
+  generatePhases,
+  createInitialRalphState,
+  evaluatePhaseTransition,
+  COMMON_ERROR_PATTERNS,
+  type BeginnerEnhancedConfig,
+  type BeginnerAnswers,
+  type DerivedPRD,
+  type ConvexSchemaHint,
+  type PhaseTask,
+  type PhaseDefinition,
+  type PhaseTransitionGate,
+  type HITLCheckpoint,
+  type CheckpointMetric,
+  type RalphLoopState,
+  type ErrorPattern,
+  type RalphMetrics,
+} from './tiers/beginner';
+
+// Intermediate tier
+export {
+  INTERMEDIATE_CONFIG,
+  INTERMEDIATE_QUESTIONS,
+  generateArchitecturePreview,
+} from './tiers/intermediate';
+
+// Advanced tier
+export {
+  ADVANCED_CONFIG,
+  ADVANCED_QUESTIONS,
+  requiresReview,
+  categorizeChange,
+  assessImpact,
+  formatChangePreview,
+  type ChangeImpact,
+  type ChangeCategory,
+  type PendingChange,
+  type ChangePreviewState,
+} from './tiers/advanced';
+
+// Expert tier
+export {
+  EXPERT_CONFIG,
+  EXPERT_QUESTIONS,
+  getExpertModeConfig,
+  formatAdvisorOutput,
+  parseTechStackFreeform,
+  parseRequirementsFreeform,
+  type GuardianRole,
+  type ExpertModeConfig,
+  type Observation,
+  type AdvisorOutput,
+} from './tiers/expert';
+
+// Team tier
+export {
+  TEAM_CONFIG,
+  TEAM_QUESTIONS,
+  AGENT_CONFIGS,
+  DEFAULT_KNOWLEDGE_SHARE_CONFIG,
+  formatTeamDashboard,
+  decomposeTask,
+  type TeamStructure,
+  type ParallelStrategy,
+  type MergeStrategy,
+  type TeamMember,
+  type WorkChunk,
+  type TeamCoordinationState,
+  type AgentConfig,
+  type TeamNotification,
+  type KnowledgeShareConfig,
+} from './tiers/team';
+
+// Tier-aware interview
+export {
+  runTierAwareInterview,
+  askMCQQuestion,
+  askQuestion,
+  convertToPRDAnswers,
+  type TierInterviewResult,
+} from './tier-interview';
+
+// HITL capture
+export {
+  captureHITLCheckpoint,
+  formatCheckpointSummary,
+  quickCapture,
+  getVercelPreviewUrl,
+  deployVercelPreview,
+  type CaptureResult,
+  type MetricResult,
+} from './hitl-capture';
+
+// Ralph Engine (Durable Workflow)
+export {
+  RalphEngine,
+  loadEvents,
+  loadCheckpoint,
+  clearEvents,
+  clearCheckpoint,
+  appendEvent,
+  saveCheckpoint,
+  replayEvents,
+  generateEventId,
+  type WorkflowEventType,
+  type WorkflowEvent,
+  type WorkflowCheckpoint,
+  type TaskExecution,
+  type RetryConfig,
+} from './ralph-engine';
+
+// Progress Emitter (Real-Time SSE)
+export {
+  progressEmitter,
+  loadProgressEvents,
+  formatProgressUpdate,
+  createProgressUpdate,
+  type ProgressStatus,
+  type ProgressType,
+  type ProgressUpdate,
+  type ProgressCallback,
+  type WebhookConfig,
+  type SubscriptionInfo,
+} from './progress-emitter';
+
+// Task Orchestrator (DAG Execution)
+export {
+  TaskOrchestrator,
+  buildTaskGraph,
+  topologicalSort,
+  generateExecutionPlan,
+  formatExecutionPlan,
+  formatGraphAsMermaid,
+  type TaskNode,
+  type TaskGraph,
+  type ExecutionPlan,
+  type ResourceLimits,
+  type OrchestratorConfig,
+} from './task-orchestrator';

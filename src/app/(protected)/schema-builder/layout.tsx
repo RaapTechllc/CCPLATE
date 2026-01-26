@@ -1,5 +1,8 @@
 import { Metadata } from "next";
 
+// Force dynamic rendering for Convex auth
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Schema Builder | CCPLATE",
   description: "Generate Prisma models from natural language descriptions",

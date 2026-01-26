@@ -281,6 +281,159 @@
 - [x] File upload system
 - [x] All 6 AI Builders (Hook, Prompt, Agent, Schema, API, Component)
 
+### Beginner Tier v1 - Workflow Tiers ✅ (2026-01-26)
+
+#### 5-Tier Workflow Framework ✅
+- [x] Created `src/lib/guardian/tiers/` with 5 tier configs (~3,500 LOC total)
+- [x] Beginner (95% auto), Intermediate (75%), Advanced (50%), Expert (25%), Team (variable)
+- [x] Each tier has: nudgeConfig, hitlConfig, autoResolve settings
+- [x] `getTierConfig()` and `getTierInfo()` utilities
+
+#### Beginner Tier Enhancements ✅ (~1,700 LOC)
+- [x] **Smart MCQ Questions** - 6 core + 6 conditional follow-ups
+  - [x] projectType, primaryFeature, userAuth, dataStorage, timeline, projectDescription
+  - [x] Conditional: paymentProvider, billingModel, fileTypes, dataSource, messagingType, contentType
+  - [x] `getApplicableQuestions()` returns applicable questions based on answers
+
+- [x] **AI-Powered PRD Derivation**
+  - [x] `extractProjectName()` - 4 NLP patterns (noun+app, domain noun, capitalized, verb→noun)
+  - [x] `inferEntitiesFromDescription()` - 10 entity types (user, post, product, order, message, etc.)
+  - [x] `assessComplexity()` - Score 1-15 → simple/moderate/complex
+  - [x] `deriveConvexSchema()` - Auto-generate table schemas with fields, types, indexes
+
+- [x] **Ralph Loop Execution**
+  - [x] `generatePhases()` - 3-5 dynamic phases based on PRD complexity
+  - [x] `PhaseDefinition` with tasks, validationCommand, dependencies
+  - [x] `PhaseTransitionGate` types: all_tasks, build_pass, critical_paths, validation_pass
+  - [x] `evaluatePhaseTransition()` - Check gates, required tasks, min completion %
+  - [x] `COMMON_ERROR_PATTERNS` - 8 patterns with auto-fix suggestions
+
+- [x] **Demo-Quality HITL Checkpoints**
+  - [x] `HITLCheckpoint` with screenshots, demoUrl, deployUrl, metrics
+  - [x] `CheckpointMetric` with target and validation command
+
+#### CLI & Integration ✅
+- [x] `ccplate init` now uses tier-aware interview by default
+- [x] `ccplate init --legacy` for old text-based interview
+- [x] `ccplate ralph checkpoint <phase>` - Capture HITL checkpoint
+- [x] `ccplate ralph status` - Show Ralph Loop state
+- [x] Created `src/lib/guardian/tier-interview.ts` (~490 LOC)
+- [x] Created `src/lib/guardian/hitl-capture.ts` (~315 LOC)
+
+#### Testing ✅
+- [x] 21 unit tests for Beginner tier (questions, derivation, phases, error patterns)
+- [x] All tests passing
+
+---
+
+## Current Sprint
+
+### 🚀 Priority 9: Beginner Tier v2 - "Just Get Results" (2026-01-26)
+
+> Goal: Make the Beginner tier truly autonomous with real-time visibility and self-healing.
+
+#### Phase 9.1: Durable Workflow Engine (P0) ✅ (2026-01-26)
+- [x] **Created `src/lib/guardian/ralph-engine.ts`** (~750 LOC) - Event-sourced execution
+  - [x] `WorkflowEvent` interface (18 event types: TASK_STARTED, TASK_COMPLETED, TASK_FAILED, PHASE_TRANSITION, etc.)
+  - [x] Event log persistence to `memory/ralph-events.jsonl`
+  - [x] `replayEvents()` - Reconstruct state from event log
+  - [x] `checkpoint()` - Save resumable state to `memory/ralph-checkpoint.json`
+  - [x] `RalphEngine.resume()` - Continue from last checkpoint after crash
+  - [x] Idempotent task execution (SHA-256 checksum-based deduplication)
+  - [x] Exponential backoff retry with configurable limits (RetryConfig)
+
+- [x] **Created `src/lib/guardian/task-orchestrator.ts`** (~350 LOC) - DAG-based execution
+  - [x] `buildTaskGraph()` - Build dependency graph from phase tasks
+  - [x] `topologicalSort()` - Topological sort for execution order
+  - [x] `TaskOrchestrator` class with parallel execution of independent tasks
+  - [x] Resource-aware scheduling (maxConcurrent limit)
+  - [x] Critical path highlighting with `findCriticalPath()`
+  - [x] `formatExecutionPlan()` and `formatGraphAsMermaid()` for visualization
+
+#### Phase 9.2: Real-Time Progress API (P0) ✅ (2026-01-26)
+- [x] **Created `src/app/api/guardian/stream/route.ts`** - Server-Sent Events endpoint
+  - [x] GET handler - Establishes SSE connection with heartbeat (30s)
+  - [x] POST handler - Manual event emission for testing
+  - [x] Query params: types, since, replay
+  - [x] Max connection time (5 min) with auto-reconnect message
+  
+- [x] **Created `src/lib/guardian/progress-emitter.ts`** (~350 LOC) - Event broadcaster
+  - [x] `progressEmitter.emit(update)` - Broadcast to all listeners
+  - [x] `subscribe(callback, filters?)` / `unsubscribe(id)` pattern
+  - [x] Buffer events (max 100) when no listeners, replay on connect
+  - [x] Webhook delivery for Slack/Discord with formatted messages
+  - [x] `createSSEStream()` for async generator pattern
+  - [x] `loadProgressEvents()` from file
+
+- [x] **Created `src/app/(protected)/guardian/live/page.tsx`** - Live dashboard
+  - [x] Real-time task status cards with phase grouping
+  - [x] Build/test log terminal with auto-scroll
+  - [x] Phase progress bar with overall percentage
+  - [x] Error timeline with collapsible details
+  - [x] Tabs: Overview, Tasks, Build Log, Events, Errors
+  - [x] Connection status indicator with auto-reconnect
+
+#### CLI Commands Added (2026-01-26)
+- [x] `ccplate ralph events [--limit N]` - Show workflow events
+- [x] `ccplate ralph checkpoint-info` - Show last checkpoint details
+- [x] `ccplate ralph plan` - Show execution plan with levels
+- [x] `ccplate ralph graph` - Show task dependency graph (Mermaid)
+- [x] `ccplate ralph progress` - Show progress stream events
+- [x] `ccplate ralph resume` - Resume from last checkpoint
+- [x] `ccplate ralph clear` - Clear events and checkpoint
+
+#### UI Components Added (2026-01-26)
+- [x] `src/components/ui/badge.tsx` - Status badges
+- [x] `src/components/ui/progress.tsx` - Progress bars
+- [x] `src/components/ui/scroll-area.tsx` - Scrollable containers
+- [x] `src/components/ui/tabs.tsx` - Tab navigation
+
+#### Tests Added (2026-01-26)
+- [x] `tests/lib/guardian/ralph-engine.test.ts` - 15 tests
+- [x] `tests/lib/guardian/task-orchestrator.test.ts` - 19 tests
+- [x] `tests/lib/guardian/progress-emitter.test.ts` - 17 tests
+- [x] Total: 51 new tests (160 unit tests total)
+
+#### Phase 9.3: Quality Gates (P1) 🟠
+- [ ] **Create `src/lib/guardian/quality-gate.ts`** - Pre-commit validation
+  - [ ] TypeScript check (tsc --noEmit)
+  - [ ] Lint check (eslint --fix with auto-fix count)
+  - [ ] Test coverage check (vitest --coverage)
+  - [ ] Security scan (detect secrets, common vulnerabilities)
+  - [ ] Bundle size analysis (warn on large deps)
+  - [ ] `QualityGateResult` with blockers/warnings
+
+- [ ] **Integrate Oracle for AI Code Review**
+  - [ ] Call Oracle on each file change
+  - [ ] Check against react-best-practices skill (57 rules)
+  - [ ] Generate improvement suggestions
+  - [ ] Track review scores over time
+
+#### Phase 9.4: Self-Healing Error Recovery (P1) 🟠
+- [ ] **Create `src/lib/guardian/error-recovery.ts`** - Learning system
+  - [ ] `ErrorPatternDB` with dynamic patterns
+  - [ ] Multiple fix strategies per pattern with success rates
+  - [ ] Auto-categorize new errors
+  - [ ] Learn from successful fixes
+  - [ ] Context-aware fix selection (file type, error location)
+
+- [ ] **Create `memory/error-patterns.json`** - Pattern database
+  - [ ] Seed with COMMON_ERROR_PATTERNS from beginner.ts
+  - [ ] Track occurrences, fix success rate, avg fix time
+  - [ ] Store example error → fix pairs
+
+- [ ] **Integrate with Ralph Engine**
+  - [ ] On error: lookup pattern → try best strategy → fallback
+  - [ ] Record fix attempt results
+  - [ ] Escalate to HITL after max retries
+
+#### Phase 9.5: Smart Handoffs (P2) 🟡
+- [ ] **Create `src/lib/guardian/smart-handoff.ts`** - Context compression
+  - [ ] Analyze next task to determine relevant context
+  - [ ] Compress decisions, blockers, patterns, tests
+  - [ ] Priority-based injection (critical first)
+  - [ ] Hash full context for retrieval if needed
+
 ---
 
 ## Backlog
@@ -337,22 +490,27 @@
 
 | Metric | Value | Date |
 |--------|-------|------|
-| Guardian Phases Complete | 7/7 (100%) | 2026-01-23 |
-| Guardian Core LOC | ~7,400 | 2026-01-23 |
-| Guardian Modules | 20 (all complete) | 2026-01-23 |
-| CLI Commands | 22+ families | 2026-01-23 |
+| Guardian Phases Complete | 9/9 (100%) | 2026-01-26 |
+| Guardian Core LOC | ~10,000+ | 2026-01-26 |
+| Guardian Modules | 28+ (including tiers, ralph-engine, task-orchestrator, progress-emitter) | 2026-01-26 |
+| CLI Commands | 31+ families (added 7 ralph commands) | 2026-01-26 |
+| Workflow Tiers | 5 (beginner, intermediate, advanced, expert, team) | 2026-01-26 |
 | Agents Defined | 3 (meta-agent, rlm-adapter, team-coordinator) | 2026-01-23 |
 | AI Builders | 6 (agent, hook, prompt, schema, api, component) | 2026-01-23 |
-| Web UI Pages | 4 guardian pages (dashboard, timeline, worktrees, agents) | 2026-01-23 |
-| Unit Tests | 65 passing | 2026-01-25 |
+| Web UI Pages | 5 guardian pages (dashboard, timeline, worktrees, agents, **live**) | 2026-01-26 |
+| Unit Tests | **160 passing** | 2026-01-26 |
 | Guardian Tests | 6 passing | 2026-01-25 |
+| Beginner Tier Tests | 21 passing | 2026-01-26 |
+| Ralph Engine Tests | 15 passing | 2026-01-26 |
+| Task Orchestrator Tests | 19 passing | 2026-01-26 |
+| Progress Emitter Tests | 17 passing | 2026-01-26 |
 | E2E Test Files | 8 (auth, api, builders, guardian, home, protected-routes, ai-builders) | 2026-01-25 |
 | Security Issues Fixed | path-guard regex, agent tool audit, API auth, file magic bytes | 2026-01-22 |
-| Tasks Completed | 80+ | 2026-01-25 |
+| Tasks Completed | 95+ | 2026-01-26 |
 | Zod Version | 4.3.6 | 2026-01-25 |
-| Overall Readiness | ~95% | 2026-01-25 |
+| Overall Readiness | ~97% | 2026-01-26 |
 
 ---
 
-**Last Updated:** 2026-01-25
-**Next Review:** Production ready - all major migrations complete
+**Last Updated:** 2026-01-26
+**Next Review:** Beginner Tier v2 Phase 9.3 (Quality Gates)

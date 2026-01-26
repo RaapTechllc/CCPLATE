@@ -32,6 +32,19 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Use standalone output for deployment
+  output: 'standalone',
+  
+  // Disable React Strict Mode during build
+  reactStrictMode: false,
+  
+  // Disable static generation entirely - all pages are dynamic
+  // This is required for Convex auth which needs client-side rendering
+  experimental: {
+    // Disable partial prerendering
+    ppr: false,
+  },
+  
   async headers() {
     return [
       {

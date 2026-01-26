@@ -1,5 +1,9 @@
 import Image from "next/image";
 
+// Disable static generation for this page
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 export default function Home() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">

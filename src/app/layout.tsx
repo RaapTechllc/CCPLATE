@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { Toaster } from "@/components/ui/toaster";
-import { Header } from "@/components/layout/header";
+import { ClientHeader } from "@/components/layout/client-header";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "CCPLATE - Next.js Boilerplate",
-  description: "A production-ready Next.js boilerplate with TypeScript, Prisma, and NextAuth",
+  description: "A production-ready Next.js boilerplate with TypeScript, Prisma, and Convex",
 };
 
 export default function RootLayout({
@@ -26,12 +26,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <Providers>
-          <Header />
+          <ClientHeader />
           <main className="min-h-screen">
             {children}
           </main>

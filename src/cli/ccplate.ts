@@ -26,6 +26,15 @@ import {
   updateWorkflowStateWithPRD,
 } from "../lib/guardian/prd";
 import {
+  runTierAwareInterview,
+  type TierInterviewResult,
+} from "../lib/guardian/tier-interview";
+import {
+  captureHITLCheckpoint,
+  formatCheckpointSummary,
+} from "../lib/guardian/hitl-capture";
+import type { PhaseDefinition } from "../lib/guardian/tiers/beginner";
+import {
   startHarnessRun,
   pickVariant,
   cleanupHarness,
@@ -104,6 +113,25 @@ import {
   parseDeployEnv,
   parseProjectName,
 } from "../lib/guardian/vercel-deploy";
+import {
+  RalphEngine,
+  loadEvents,
+  loadCheckpoint,
+  clearEvents,
+  clearCheckpoint,
+  type WorkflowEvent,
+} from "../lib/guardian/ralph-engine";
+import {
+  progressEmitter,
+  loadProgressEvents,
+  formatProgressUpdate,
+} from "../lib/guardian/progress-emitter";
+import {
+  TaskOrchestrator,
+  generateExecutionPlan,
+  formatExecutionPlan,
+  formatGraphAsMermaid,
+} from "../lib/guardian/task-orchestrator";
 
 const ROOT_DIR = resolve(import.meta.dir, "../..");
 const CONFIG_PATH = join(ROOT_DIR, "ccplate.config.json");
@@ -805,7 +833,7 @@ function schemaUnlock(): void {
 
 // ==================== INIT / PRD COMMANDS ====================
 
-async function runInit(options: { force?: boolean; goal?: string }): Promise<void> {
+async function runInit(options: { force?: boolean; goal?: string; tiered?: boolean }): Promise<void> {
   console.log("\n" + "═".repeat(60));
   console.log("  🎯 CCPLATE Project Discovery");
   console.log("═".repeat(60) + "\n");
@@ -824,7 +852,34 @@ async function runInit(options: { force?: boolean; goal?: string }): Promise<voi
     console.log("📦 Existing PRD will be archived before creating new one.\n");
   }
 
-  const answers = await runInteractiveInterview();
+  // Use tier-aware interview by default (or with --tiered flag)
+  let answers;
+  let tierResult: TierInterviewResult | undefined;
+
+  if (options.tiered !== false) {
+    tierResult = await runTierAwareInterview();
+    answers = tierResult.derivedPRD;
+    
+    // Save enhanced metadata for Beginner tier
+    if (tierResult.tier === "beginner" && tierResult.enhancedPRD) {
+      const enhancedPath = join(ROOT_DIR, "memory", "enhanced-prd.json");
+      const memoryDir = join(ROOT_DIR, "memory");
+      if (!existsSync(memoryDir)) {
+        mkdirSync(memoryDir, { recursive: true });
+      }
+      writeFileSync(enhancedPath, JSON.stringify({
+        tier: tierResult.tier,
+        enhancedPRD: tierResult.enhancedPRD,
+        phases: tierResult.phases,
+        initialState: tierResult.initialState,
+        rawAnswers: tierResult.answers,
+      }, null, 2));
+      console.log(`\n📦 Enhanced PRD saved to: ${enhancedPath}`);
+    }
+  } else {
+    // Legacy interview
+    answers = await runInteractiveInterview();
+  }
 
   console.log("\n" + "─".repeat(60));
   console.log("📋 Review your answers:\n");
@@ -832,6 +887,9 @@ async function runInit(options: { force?: boolean; goal?: string }): Promise<voi
   console.log(`Tech Stack: ${answers.techStack.frontend} / ${answers.techStack.backend} / ${answers.techStack.database}`);
   console.log(`Success Criteria: ${answers.successCriteria.length} items`);
   console.log(`Critical Paths: ${answers.criticalPaths.length} flows`);
+  if (tierResult) {
+    console.log(`Tier: ${tierResult.tier}`);
+  }
   console.log("─".repeat(60) + "\n");
 
   const result = savePRD(ROOT_DIR, answers, { force: options.force });
@@ -852,6 +910,224 @@ async function runInit(options: { force?: boolean; goal?: string }): Promise<voi
   console.log(`   🔒 Hash: ${prd?.metadata.hash}\n`);
   console.log("This PRD is now the 'Success Contract' for autonomous agent work.");
   console.log("Agents will use success criteria and critical paths to validate their work.\n");
+
+  // Show next steps for Beginner tier
+  if (tierResult?.tier === "beginner" && tierResult.phases) {
+    console.log("🚀 Beginner Mode Ready!");
+    console.log("   Guardian will now execute the Ralph Loop autonomously.");
+    console.log("   You'll see checkpoints at each phase boundary.\n");
+    console.log("   Next: Run 'ccplate ralph start' to begin autonomous building.\n");
+  }
+}
+
+// ==================== RALPH LOOP COMMANDS ====================
+
+async function runRalphCheckpoint(phaseId: string): Promise<void> {
+  // Load enhanced PRD
+  const enhancedPath = join(ROOT_DIR, "memory", "enhanced-prd.json");
+  if (!existsSync(enhancedPath)) {
+    console.error("❌ No enhanced PRD found. Run 'ccplate init' first.");
+    process.exit(1);
+  }
+
+  const data = JSON.parse(readFileSync(enhancedPath, "utf-8"));
+  const phases = data.phases as PhaseDefinition[];
+  const phase = phases.find(p => p.id === phaseId);
+
+  if (!phase) {
+    console.error(`❌ Phase '${phaseId}' not found.`);
+    console.log(`   Available phases: ${phases.map(p => p.id).join(", ")}`);
+    process.exit(1);
+  }
+
+  console.log(`\n📸 Capturing HITL checkpoint for phase: ${phase.name}...\n`);
+
+  const capture = await captureHITLCheckpoint(phase);
+  console.log(formatCheckpointSummary(phase, capture));
+}
+
+function showRalphStatus(): void {
+  const enhancedPath = join(ROOT_DIR, "memory", "enhanced-prd.json");
+  
+  if (!existsSync(enhancedPath)) {
+    console.log("No Ralph Loop state found. Run 'ccplate init' to create one.");
+    return;
+  }
+
+  const data = JSON.parse(readFileSync(enhancedPath, "utf-8"));
+  const { tier, enhancedPRD, phases, initialState } = data;
+
+  console.log("\n🔄 Ralph Loop Status\n");
+  console.log("─".repeat(60));
+  console.log(`Tier: ${tier}`);
+  console.log(`Project: ${enhancedPRD.projectName}`);
+  console.log(`Complexity: ${enhancedPRD.estimatedComplexity}`);
+  console.log(`Entities: ${enhancedPRD.keyEntities.join(", ")}`);
+  console.log("─".repeat(60));
+  
+  console.log("\n📋 Phases:\n");
+  for (const phase of phases as PhaseDefinition[]) {
+    const isComplete = initialState.tasksCompleted.some((t: string) => 
+      phase.tasks.some(pt => pt.id === t)
+    );
+    const status = phase.id === initialState.currentPhase 
+      ? "▶️ CURRENT" 
+      : isComplete 
+        ? "✅ COMPLETE" 
+        : "⏳ PENDING";
+    
+    console.log(`  ${phase.emoji} ${phase.name} [${status}]`);
+    console.log(`     ${phase.tasks.length} tasks | Gate: ${phase.transitionGate.type}`);
+    console.log(`     Checkpoint: ${phase.hitlCheckpoint.type}`);
+  }
+
+  console.log("\n📊 Metrics:\n");
+  console.log(`  Iterations: ${initialState.metrics.totalIterations}`);
+  console.log(`  Builds: ${initialState.metrics.successfulBuilds} passed / ${initialState.metrics.failedBuilds} failed`);
+  console.log(`  Tests: ${initialState.metrics.testsPassed} / ${initialState.metrics.testsRun} passed`);
+  console.log(`  Commits: ${initialState.metrics.commitsCreated}`);
+  console.log();
+}
+
+function showRalphEvents(limit: number = 20): void {
+  const events = loadEvents(ROOT_DIR);
+  
+  if (events.length === 0) {
+    console.log("No workflow events found.");
+    return;
+  }
+  
+  const recentEvents = events.slice(-limit);
+  
+  console.log(`\n📜 Recent Workflow Events (${recentEvents.length}/${events.length})\n`);
+  console.log("─".repeat(80));
+  
+  for (const event of recentEvents) {
+    const time = new Date(event.timestamp).toLocaleTimeString();
+    const emoji = getEventEmoji(event.type);
+    const phase = event.phaseId ? ` [${event.phaseId}]` : "";
+    const task = event.taskId ? ` (${event.taskId})` : "";
+    
+    console.log(`${time} ${emoji} ${event.type}${phase}${task}`);
+    
+    // Show relevant payload info
+    if (event.payload.message) {
+      console.log(`         ${event.payload.message}`);
+    }
+    if (event.payload.error) {
+      console.log(`         ❌ ${event.payload.error}`);
+    }
+  }
+  console.log();
+}
+
+function getEventEmoji(type: string): string {
+  const emojis: Record<string, string> = {
+    WORKFLOW_STARTED: "🚀",
+    WORKFLOW_COMPLETED: "🏁",
+    WORKFLOW_FAILED: "💥",
+    PHASE_STARTED: "📦",
+    PHASE_COMPLETED: "✅",
+    PHASE_FAILED: "❌",
+    TASK_STARTED: "▶️",
+    TASK_COMPLETED: "✅",
+    TASK_FAILED: "❌",
+    TASK_SKIPPED: "⏭️",
+    TASK_RETRIED: "🔄",
+    HITL_REQUESTED: "🚧",
+    HITL_RESOLVED: "✔️",
+    BUILD_OUTPUT: "🔨",
+    TEST_RESULT: "🧪",
+    ERROR_DETECTED: "⚠️",
+    ERROR_FIXED: "🔧",
+    CHECKPOINT_CREATED: "💾",
+    CHECKPOINT_RESUMED: "♻️",
+  };
+  return emojis[type] || "📝";
+}
+
+function showRalphCheckpointInfo(): void {
+  const checkpoint = loadCheckpoint(ROOT_DIR);
+  
+  if (!checkpoint) {
+    console.log("No checkpoint found.");
+    return;
+  }
+  
+  console.log("\n💾 Last Checkpoint\n");
+  console.log("─".repeat(60));
+  console.log(`ID: ${checkpoint.id}`);
+  console.log(`Created: ${new Date(checkpoint.timestamp).toLocaleString()}`);
+  console.log(`Phase: ${checkpoint.state.currentPhase}`);
+  console.log(`Tasks Completed: ${checkpoint.state.tasksCompleted.length}`);
+  console.log(`Tasks Failed: ${checkpoint.state.tasksFailed.length}`);
+  console.log(`Events Logged: ${checkpoint.metadata.totalEvents}`);
+  console.log(`Version: ${checkpoint.metadata.version}`);
+  console.log();
+}
+
+function showRalphPlan(): void {
+  const enhancedPath = join(ROOT_DIR, "memory", "enhanced-prd.json");
+  
+  if (!existsSync(enhancedPath)) {
+    console.log("No Ralph Loop state found. Run 'ccplate init' first.");
+    return;
+  }
+  
+  const data = JSON.parse(readFileSync(enhancedPath, "utf-8"));
+  const { phases } = data;
+  
+  const orchestrator = new TaskOrchestrator(phases);
+  const plan = generateExecutionPlan(orchestrator.getGraph());
+  
+  console.log("\n" + formatExecutionPlan(plan));
+  console.log();
+}
+
+function showRalphGraph(): void {
+  const enhancedPath = join(ROOT_DIR, "memory", "enhanced-prd.json");
+  
+  if (!existsSync(enhancedPath)) {
+    console.log("No Ralph Loop state found. Run 'ccplate init' first.");
+    return;
+  }
+  
+  const data = JSON.parse(readFileSync(enhancedPath, "utf-8"));
+  const { phases } = data;
+  
+  const orchestrator = new TaskOrchestrator(phases);
+  const mermaid = formatGraphAsMermaid(orchestrator.getGraph());
+  
+  console.log("\n📊 Task Dependency Graph (Mermaid)\n");
+  console.log("```mermaid");
+  console.log(mermaid);
+  console.log("```\n");
+}
+
+function clearRalphState(): void {
+  clearEvents(ROOT_DIR);
+  clearCheckpoint(ROOT_DIR);
+  
+  console.log("✅ Cleared Ralph engine state (events and checkpoint).");
+}
+
+function showRalphProgress(): void {
+  const events = loadProgressEvents(ROOT_DIR);
+  
+  if (events.length === 0) {
+    console.log("No progress events found.");
+    return;
+  }
+  
+  const recent = events.slice(-30);
+  
+  console.log("\n📊 Progress Stream (last 30 events)\n");
+  console.log("─".repeat(80));
+  
+  for (const event of recent) {
+    console.log(formatProgressUpdate(event));
+  }
+  console.log();
 }
 
 function showPRDStatus(): void {
@@ -1109,10 +1385,68 @@ async function main(): Promise<void> {
     showUnifiedStatus();
   } else if (command === "init" || command === "init-poc") {
     const force = args.includes("--force");
+    const legacy = args.includes("--legacy");
     if (subcommand === "status") {
       showPRDStatus();
     } else {
-      await runInit({ force });
+      await runInit({ force, tiered: !legacy });
+    }
+  } else if (command === "ralph") {
+    switch (subcommand) {
+      case "checkpoint":
+        if (!taskId) {
+          console.error("Error: Missing phase-id\nUsage: ccplate ralph checkpoint <phase-id>");
+          process.exit(1);
+        }
+        await runRalphCheckpoint(taskId);
+        break;
+      case "status":
+        showRalphStatus();
+        break;
+      case "events": {
+        const limitIdx = args.indexOf("--limit");
+        const limit = limitIdx !== -1 ? parseInt(args[limitIdx + 1], 10) : 20;
+        showRalphEvents(limit);
+        break;
+      }
+      case "checkpoint-info":
+        showRalphCheckpointInfo();
+        break;
+      case "plan":
+        showRalphPlan();
+        break;
+      case "graph":
+        showRalphGraph();
+        break;
+      case "progress":
+        showRalphProgress();
+        break;
+      case "clear":
+        clearRalphState();
+        break;
+      case "resume": {
+        const engine = RalphEngine.resume(ROOT_DIR);
+        if (engine) {
+          console.log("✅ Resumed Ralph engine from checkpoint.");
+          console.log(`   Phase: ${engine.getState().currentPhase}`);
+          console.log(`   Tasks completed: ${engine.getState().tasksCompleted.length}`);
+        } else {
+          console.log("No checkpoint to resume from.");
+        }
+        break;
+      }
+      default:
+        console.log("Ralph Loop Commands:");
+        console.log("  ccplate ralph status                 Show current Ralph Loop state");
+        console.log("  ccplate ralph checkpoint <phase-id>  Capture HITL checkpoint for phase");
+        console.log("  ccplate ralph events [--limit N]     Show workflow events (default 20)");
+        console.log("  ccplate ralph checkpoint-info        Show last checkpoint details");
+        console.log("  ccplate ralph plan                   Show execution plan");
+        console.log("  ccplate ralph graph                  Show task dependency graph (Mermaid)");
+        console.log("  ccplate ralph progress               Show progress stream events");
+        console.log("  ccplate ralph resume                 Resume from last checkpoint");
+        console.log("  ccplate ralph clear                  Clear events and checkpoint");
+        break;
     }
   } else if (command === "worktree") {
     switch (subcommand) {

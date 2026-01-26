@@ -171,6 +171,10 @@ ccplate hook generate <desc>      # Generate hook code
 ccplate component generate <desc> # Generate React component
 ccplate api generate <desc>       # Generate API endpoint
 
+# Ralph Loop (Beginner Tier)
+ccplate ralph checkpoint <phase>  # Capture HITL checkpoint for phase
+ccplate ralph status              # Show Ralph Loop state
+
 # Vercel Deployment
 ccplate deploy                    # Deploy to Vercel (preview)
 ccplate deploy --prod             # Deploy to production
