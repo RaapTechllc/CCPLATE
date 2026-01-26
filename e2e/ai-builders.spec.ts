@@ -953,6 +953,12 @@ test.describe("Cross-Builder Integration", () => {
 // =============================================================================
 
 test.describe("Builder API Mocking", () => {
+  // These tests need a page context for relative URLs to work
+  test.beforeEach(async ({ page }) => {
+    // Navigate to home page first to establish base URL context
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+  });
+
   test("component builder API mock returns expected structure", async ({ page }) => {
     await setupAIMocks(page);
 
