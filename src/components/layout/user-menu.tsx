@@ -14,7 +14,9 @@ interface UserMenuProps {
 }
 
 export function UserMenu({ className }: UserMenuProps) {
-  const { isAuthenticated, isLoading } = useConvexAuth();
+  const convexAuth = useConvexAuth();
+  const isAuthenticated = convexAuth?.isAuthenticated ?? false;
+  const isLoading = convexAuth?.isLoading ?? false;
   const { signOut } = useAuthActions();
   const user = useQuery(api.users.getCurrentUser);
   const [isOpen, setIsOpen] = useState(false);

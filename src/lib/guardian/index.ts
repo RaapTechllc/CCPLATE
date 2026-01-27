@@ -368,3 +368,72 @@ export {
   type ResourceLimits,
   type OrchestratorConfig,
 } from './task-orchestrator';
+
+// Quality Gate (Pre-commit Validation)
+export {
+  runQualityGate,
+  runQuickCheck,
+  checkTypeScript,
+  checkLint,
+  checkCoverage,
+  checkSecurity,
+  checkBundleSize,
+  formatQualityGateResult,
+  DEFAULT_QUALITY_GATE_CONFIG,
+  SECRET_PATTERNS,
+  VULNERABILITY_PATTERNS,
+  type GateStatus,
+  type GateCheckResult,
+  type QualityGateResult,
+  type QualityGateConfig,
+  type SecretPattern,
+  type CoverageData,
+} from './quality-gate';
+
+// Error Recovery (Self-Healing System)
+export {
+  initializePatternDB,
+  loadPatternDB,
+  savePatternDB,
+  categorizeError,
+  matchError,
+  attemptRecovery,
+  recordAttempt,
+  recordOutcome,
+  learnPattern,
+  getDBStats,
+  getSuccessRate,
+  formatRecoveryResult,
+  getPatternDBPath,
+  type ErrorCategory,
+  type FixOutcome,
+  type FixStrategy,
+  type ErrorPattern,
+  type ErrorExample,
+  type ErrorMatch,
+  type FixAttempt,
+  type ErrorPatternDB,
+  type RecoveryResult,
+} from './error-recovery';
+
+// Smart Handoff (Context Compression)
+export {
+  analyzeNextTask,
+  gatherContextItems,
+  compressContext,
+  hashFullContext,
+  saveFullContext,
+  loadFullContext,
+  createSmartHandoff,
+  loadSmartHandoff,
+  formatContextForPrompt,
+  formatSmartHandoff,
+  DEFAULT_HANDOFF_CONFIG,
+  type ContextPriority,
+  type ContextItem,
+  type ContextType,
+  type TaskAnalysis,
+  type CompressedContext,
+  type HandoffConfig,
+  type SmartHandoffResult,
+} from './smart-handoff';

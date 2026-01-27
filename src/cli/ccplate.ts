@@ -104,6 +104,13 @@ import {
   formatHandoff,
 } from "../lib/guardian/handoff";
 import {
+  createSmartHandoff,
+  loadSmartHandoff,
+  loadFullContext,
+  formatSmartHandoff,
+  formatContextForPrompt,
+} from "../lib/guardian/smart-handoff";
+import {
   deployToVercel,
   getDeploymentStatus,
   listDeployments,
@@ -132,6 +139,21 @@ import {
   formatExecutionPlan,
   formatGraphAsMermaid,
 } from "../lib/guardian/task-orchestrator";
+import {
+  runQualityGate,
+  runQuickCheck,
+  formatQualityGateResult,
+  type QualityGateConfig,
+} from "../lib/guardian/quality-gate";
+import {
+  loadPatternDB,
+  attemptRecovery,
+  recordOutcome,
+  learnPattern,
+  getDBStats,
+  formatRecoveryResult,
+  getPatternDBPath,
+} from "../lib/guardian/error-recovery";
 
 const ROOT_DIR = resolve(import.meta.dir, "../..");
 const CONFIG_PATH = join(ROOT_DIR, "ccplate.config.json");
@@ -1306,6 +1328,15 @@ Usage:
   ccplate deploy status <deployment-id>           Check deployment status
   ccplate deploy list [--limit N]                 List recent deployments
   ccplate deploy validate                         Validate Vercel credentials
+
+  ccplate quality run [--quick]                   Run quality gate checks
+  ccplate quality status                          Show last quality gate result
+  ccplate quality config                          Show quality gate configuration
+
+  ccplate recovery match <error-message>          Match error against patterns
+  ccplate recovery stats                          Show error pattern statistics
+  ccplate recovery learn <name> <regex> <fix>     Add new error pattern
+  ccplate recovery outcome <pattern> <strategy> <result>  Record fix outcome
 
 Examples:
   ccplate status                              # Unified dashboard
@@ -2500,9 +2531,85 @@ async function main(): Promise<void> {
         console.log("\n✅ Handoff archived to memory/handoff-archive/\n");
         break;
       }
+      case "smart": {
+        // Smart handoff requires a task description
+        const taskDesc = args.slice(1).join(" ");
+        if (!taskDesc) {
+          console.error("Error: Missing task description");
+          console.error("Usage: ccplate handoff smart <task-description>");
+          process.exit(1);
+        }
+
+        const smartTaskId = `task-${Date.now().toString(36)}`;
+        console.log(`\n🧠 Creating smart handoff for: ${taskDesc}\n`);
+        
+        const smartResult = createSmartHandoff(ROOT_DIR, smartTaskId, taskDesc);
+        
+        if (smartResult.success) {
+          console.log(formatSmartHandoff(smartResult.compressed));
+          if (smartResult.paths) {
+            console.log(`\n📄 Files:`);
+            console.log(`   Markdown: ${smartResult.paths.md}`);
+            console.log(`   JSON: ${smartResult.paths.json}`);
+          }
+        } else {
+          console.error("❌ Failed to create smart handoff");
+          process.exit(1);
+        }
+        break;
+      }
+      case "smart-show": {
+        const smartState = loadSmartHandoff(ROOT_DIR);
+        if (!smartState) {
+          console.log("\nNo smart handoff found.");
+          console.log("Run `ccplate handoff smart <task-description>` to create one.\n");
+          process.exit(0);
+        }
+
+        console.log(formatSmartHandoff(smartState));
+        console.log("\n📄 Full details: memory/SMART-HANDOFF.md\n");
+        break;
+      }
+      case "prompt": {
+        // Format for prompt injection
+        const promptState = loadSmartHandoff(ROOT_DIR);
+        if (!promptState) {
+          console.log("No smart handoff found.");
+          process.exit(1);
+        }
+
+        console.log(formatContextForPrompt(promptState));
+        break;
+      }
+      case "retrieve": {
+        // Retrieve full context by hash
+        const hash = args[1];
+        if (!hash) {
+          console.error("Error: Missing context hash");
+          console.error("Usage: ccplate handoff retrieve <hash>");
+          process.exit(1);
+        }
+
+        const fullContext = loadFullContext(ROOT_DIR, hash);
+        if (!fullContext) {
+          console.error(`No context found for hash: ${hash}`);
+          process.exit(1);
+        }
+
+        console.log(`\n📦 Full Context (${fullContext.length} items)\n`);
+        console.log("─".repeat(60));
+        for (const item of fullContext) {
+          const priority = item.priority === "critical" ? "🔴" :
+                          item.priority === "high" ? "🟠" :
+                          item.priority === "medium" ? "🟡" : "🟢";
+          console.log(`${priority} [${item.type}] ${item.content}`);
+        }
+        console.log("─".repeat(60) + "\n");
+        break;
+      }
       default:
         console.error(`Unknown handoff command: ${subcommand}`);
-        console.log("Usage: ccplate handoff [create|show|archive]");
+        console.log("Usage: ccplate handoff [create|show|archive|smart|smart-show|prompt|retrieve]");
         process.exit(1);
     }
   } else if (command === "deploy") {
@@ -2583,6 +2690,163 @@ async function main(): Promise<void> {
         }
         break;
       }
+    }
+  } else if (command === "quality") {
+    switch (subcommand) {
+      case "run": {
+        const quick = args.includes("--quick");
+        console.log(`\n🔍 Running ${quick ? "quick" : "full"} quality gate...\n`);
+        
+        const result = quick ? runQuickCheck(ROOT_DIR) : runQualityGate(ROOT_DIR);
+        console.log(formatQualityGateResult(result));
+        
+        // Save result for status command
+        const resultPath = join(ROOT_DIR, "memory", "quality-gate-result.json");
+        ensureMemoryDir();
+        writeFileSync(resultPath, JSON.stringify(result, null, 2));
+        
+        process.exit(result.overall === "fail" ? 1 : 0);
+        break;
+      }
+      case "status": {
+        const resultPath = join(ROOT_DIR, "memory", "quality-gate-result.json");
+        if (!existsSync(resultPath)) {
+          console.log("\nNo quality gate result found.");
+          console.log("Run `ccplate quality run` to check code quality.\n");
+          process.exit(0);
+        }
+        
+        const result = JSON.parse(readFileSync(resultPath, "utf-8"));
+        console.log(formatQualityGateResult(result));
+        break;
+      }
+      case "config": {
+        console.log("\n📋 Quality Gate Configuration\n");
+        console.log("Default configuration:");
+        console.log(JSON.stringify({
+          typescript: { enabled: true, strict: true },
+          lint: { enabled: true, autoFix: true },
+          coverage: { enabled: true, minPercent: 60 },
+          security: { enabled: true, checkSecrets: true, checkVulnerabilities: true },
+          bundleSize: { enabled: true, warnThresholdKb: 500, maxPackageKb: 2000 },
+        }, null, 2));
+        console.log("\nUse ccplate.config.json to override.\n");
+        break;
+      }
+      default:
+        console.log("Quality Gate Commands:");
+        console.log("  ccplate quality run [--quick]   Run quality checks");
+        console.log("  ccplate quality status          Show last result");
+        console.log("  ccplate quality config          Show configuration");
+        process.exit(1);
+    }
+  } else if (command === "recovery") {
+    switch (subcommand) {
+      case "match": {
+        // Collect all args after "match" as the error message
+        const errorMsg = args.slice(2).join(" ");
+        if (!errorMsg) {
+          console.error("Error: Missing error message");
+          console.error("Usage: ccplate recovery match <error-message>");
+          process.exit(1);
+        }
+        
+        const result = attemptRecovery(ROOT_DIR, errorMsg);
+        console.log("\n" + formatRecoveryResult(result) + "\n");
+        break;
+      }
+      case "stats": {
+        const stats = getDBStats(ROOT_DIR);
+        
+        console.log("\n📊 Error Recovery Statistics\n");
+        console.log(`Total Patterns: ${stats.totalPatterns}`);
+        console.log(`Total Strategies: ${stats.totalStrategies}`);
+        console.log(`Total Attempts: ${stats.totalAttempts}`);
+        console.log(`Overall Success Rate: ${(stats.successRate * 100).toFixed(1)}%`);
+        
+        if (stats.topPatterns.length > 0) {
+          console.log("\nTop Patterns by Occurrence:");
+          for (const p of stats.topPatterns) {
+            console.log(`  ${p.name}: ${p.occurrences} occurrences`);
+          }
+        }
+        
+        if (stats.topStrategies.length > 0) {
+          console.log("\nTop Strategies by Success Rate:");
+          for (const s of stats.topStrategies) {
+            console.log(`  ${s.description.slice(0, 40)}...: ${(s.successRate * 100).toFixed(0)}%`);
+          }
+        }
+        console.log();
+        break;
+      }
+      case "learn": {
+        const name = args[2];
+        const regex = args[3];
+        const fix = args.slice(4).join(" ");
+        
+        if (!name || !regex || !fix) {
+          console.error("Error: Missing arguments");
+          console.error("Usage: ccplate recovery learn <name> <regex> <fix-description>");
+          process.exit(1);
+        }
+        
+        const pattern = learnPattern(ROOT_DIR, name, regex, fix);
+        console.log(`\n✅ Pattern learned: ${pattern.name}`);
+        console.log(`   ID: ${pattern.id}`);
+        console.log(`   Category: ${pattern.category}`);
+        console.log(`   Strategies: ${pattern.strategies.length}\n`);
+        break;
+      }
+      case "outcome": {
+        const patternId = args[2];
+        const strategyId = args[3];
+        const outcomeStr = args[4]?.toLowerCase();
+        
+        if (!patternId || !strategyId || !outcomeStr) {
+          console.error("Error: Missing arguments");
+          console.error("Usage: ccplate recovery outcome <pattern-id> <strategy-id> <success|partial|failure>");
+          process.exit(1);
+        }
+        
+        if (!["success", "partial", "failure"].includes(outcomeStr)) {
+          console.error("Error: Outcome must be 'success', 'partial', or 'failure'");
+          process.exit(1);
+        }
+        
+        recordOutcome(ROOT_DIR, patternId, strategyId, outcomeStr as "success" | "partial" | "failure");
+        console.log(`\n✅ Recorded ${outcomeStr} outcome for ${patternId}/${strategyId}\n`);
+        break;
+      }
+      case "patterns": {
+        const db = loadPatternDB(ROOT_DIR);
+        console.log(`\n📚 Error Patterns (${db.patterns.length})\n`);
+        
+        for (const p of db.patterns.slice(0, 20)) {
+          console.log(`${p.id}`);
+          console.log(`  Name: ${p.name}`);
+          console.log(`  Category: ${p.category}`);
+          console.log(`  Confidence: ${(p.confidence * 100).toFixed(0)}%`);
+          console.log(`  Strategies: ${p.strategies.length}`);
+          console.log(`  Occurrences: ${p.occurrences}`);
+          console.log();
+        }
+        
+        if (db.patterns.length > 20) {
+          console.log(`... and ${db.patterns.length - 20} more patterns`);
+        }
+        
+        console.log(`\nDatabase: ${getPatternDBPath(ROOT_DIR)}\n`);
+        break;
+      }
+      default:
+        console.log("Error Recovery Commands:");
+        console.log("  ccplate recovery match <error>            Match error against patterns");
+        console.log("  ccplate recovery stats                    Show statistics");
+        console.log("  ccplate recovery patterns                 List all patterns");
+        console.log("  ccplate recovery learn <name> <regex> <fix>  Add pattern");
+        console.log("  ccplate recovery outcome <pattern> <strategy> <result>");
+        process.exit(1);
     }
   } else {
     console.error(`Unknown command: ${command}`);

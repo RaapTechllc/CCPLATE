@@ -24,7 +24,6 @@ const PROTECTED_ROUTES = [
   "/guardian",
   "/guardian/timeline",
   "/guardian/worktrees",
-  "/uploads",
 ];
 
 const ADMIN_ROUTES = [
