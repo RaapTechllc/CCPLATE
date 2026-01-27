@@ -53,6 +53,14 @@ const GIT_HASH_PATTERN = /^[0-9a-f]{7,40}$/;
 const GIT_BRANCH_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._\/-]{0,254}$/;
 
 /**
+ * Pattern for GitHub repository names (owner/repo)
+ * - Owner: alphanumeric, hyphens (cannot start/end with hyphen, no consecutive hyphens)
+ * - Repo: alphanumeric, hyphens, underscores, dots
+ * - Max length: 100 characters total
+ */
+const GITHUB_REPO_PATTERN = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\/[a-zA-Z0-9._-]+$/;
+
+/**
  * Shell metacharacters that could enable command injection
  * Includes Windows-specific % for environment variable expansion
  */
@@ -434,6 +442,86 @@ export function validatePath(
         value
       );
     }
+  }
+
+  return value;
+}
+
+/**
+ * Validates a GitHub repository name (owner/repo pattern)
+ *
+ * @param value - The value to validate
+ * @param fieldName - Name of the field for error messages
+ * @returns The validated repository name
+ * @throws ValidationError if validation fails
+ *
+ * @example
+ * ```ts
+ * const repo = validateRepoName(payload.repository.full_name);
+ * // Safe to use in GitHub API URLs: `https://api.github.com/repos/${repo}`
+ * ```
+ */
+export function validateRepoName(
+  value: unknown,
+  fieldName: string = 'repository'
+): string {
+  if (value === undefined || value === null) {
+    throw new ValidationError(
+      `${fieldName} is required`,
+      fieldName,
+      value
+    );
+  }
+
+  if (typeof value !== 'string') {
+    throw new ValidationError(
+      `${fieldName} must be a string`,
+      fieldName,
+      value
+    );
+  }
+
+  if (value.length === 0) {
+    throw new ValidationError(
+      `${fieldName} cannot be empty`,
+      fieldName,
+      value
+    );
+  }
+
+  if (value.length > 100) {
+    throw new ValidationError(
+      `${fieldName} is too long (max 100 characters)`,
+      fieldName,
+      value
+    );
+  }
+
+  // Check for shell metacharacters
+  if (SHELL_METACHARACTERS.test(value)) {
+    throw new ValidationError(
+      `${fieldName} contains shell metacharacters`,
+      fieldName,
+      value
+    );
+  }
+
+  if (!GITHUB_REPO_PATTERN.test(value)) {
+    throw new ValidationError(
+      `${fieldName} must follow the 'owner/repo' pattern`,
+      fieldName,
+      value
+    );
+  }
+
+  // Reject '.' and '..' as repository names to prevent traversal
+  const repoPart = value.split('/')[1];
+  if (repoPart === '.' || repoPart === '..') {
+    throw new ValidationError(
+      `${fieldName} contains invalid repository name`,
+      fieldName,
+      value
+    );
   }
 
   return value;

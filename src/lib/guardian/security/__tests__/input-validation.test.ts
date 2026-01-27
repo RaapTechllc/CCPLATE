@@ -12,6 +12,7 @@ import {
   validateOptionalPositiveInteger,
   validateSafeIdentifier,
   validateGitRef,
+  validateRepoName,
   validatePath,
   validateEnum,
   escapeShellArg,
@@ -178,6 +179,52 @@ describe("validatePath", () => {
   it("rejects paths exceeding max length", () => {
     const longPath = "a".repeat(501);
     expect(() => validatePath(longPath, "test")).toThrow(ValidationError);
+  });
+});
+
+describe("validateRepoName", () => {
+  it("accepts valid repository names", () => {
+    expect(validateRepoName("owner/repo")).toBe("owner/repo");
+    expect(validateRepoName("owner-name/repo.name")).toBe("owner-name/repo.name");
+    expect(validateRepoName("owner/repo_name")).toBe("owner/repo_name");
+    expect(validateRepoName("123owner/123repo")).toBe("123owner/123repo");
+  });
+
+  it("rejects repository names without owner", () => {
+    expect(() => validateRepoName("repo")).toThrow(ValidationError);
+  });
+
+  it("rejects repository names with multiple slashes", () => {
+    expect(() => validateRepoName("owner/repo/extra")).toThrow(ValidationError);
+  });
+
+  it("rejects repository names starting with hyphen", () => {
+    expect(() => validateRepoName("-owner/repo")).toThrow(ValidationError);
+  });
+
+  it("rejects repository names ending with hyphen in owner", () => {
+    expect(() => validateRepoName("owner-/repo")).toThrow(ValidationError);
+  });
+
+  it("rejects repository names with shell characters", () => {
+    expect(() => validateRepoName("owner/repo;rm -rf")).toThrow(ValidationError);
+  });
+
+  it("rejects empty repository names", () => {
+    expect(() => validateRepoName("")).toThrow(ValidationError);
+  });
+
+  it("rejects repository names that are too long", () => {
+    const longRepo = "a".repeat(50) + "/" + "b".repeat(51);
+    expect(() => validateRepoName(longRepo)).toThrow(ValidationError);
+  });
+
+  it("rejects '.' as repository name", () => {
+    expect(() => validateRepoName("owner/.")).toThrow(ValidationError);
+  });
+
+  it("rejects '..' as repository name", () => {
+    expect(() => validateRepoName("owner/..")).toThrow(ValidationError);
   });
 });
 
