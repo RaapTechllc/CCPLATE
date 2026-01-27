@@ -13,6 +13,7 @@ import {
   validatePositiveInteger,
   validateSafeIdentifier,
   validateGitRef,
+  validateRepoName,
   validatePath,
   ValidationError,
 } from "../input-validation";
@@ -231,6 +232,25 @@ describe("Command Injection Prevention - validateGitRef", () => {
       expect(() => validateGitRef(payload, "commitHash", "hash")).toThrow(
         ValidationError
       );
+    });
+  });
+});
+
+describe("Command Injection Prevention - validateRepoName", () => {
+  const REPO_INJECTION_PAYLOADS = [
+    "owner/repo; id",
+    "owner/repo && whoami",
+    "owner/repo | cat /etc/passwd",
+    "owner/$(whoami)",
+    "owner/`id`",
+    "owner/repo\nrm -rf /",
+    "owner/repo'$(whoami)",
+    'owner/repo"$(whoami)',
+  ];
+
+  REPO_INJECTION_PAYLOADS.forEach((payload) => {
+    it(`rejects repository payload: ${JSON.stringify(payload)}`, () => {
+      expect(() => validateRepoName(payload)).toThrow(ValidationError);
     });
   });
 });
