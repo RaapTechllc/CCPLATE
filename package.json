@@ -29,7 +29,18 @@
     "convex:dev": "convex dev",
     "convex:deploy": "convex deploy",
     "ccplate": "node --experimental-strip-types src/cli/ccplate.ts",
-    "guardian:webhook": "node --experimental-strip-types src/lib/guardian/adapters/github-webhook.ts"
+    "guardian:webhook": "node --experimental-strip-types src/lib/guardian/adapters/github-webhook.ts",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:build": "docker-compose up --build -d",
+    "docker:logs": "docker-compose logs -f app",
+    "db:migrate": "npx prisma migrate dev",
+    "db:push": "npx prisma db push",
+    "db:studio": "npx prisma studio",
+    "db:reset": "npx prisma migrate reset --force && npm run seed",
+    "seed": "tsx scripts/seed-demo.ts",
+    "reset": "tsx scripts/reset-demo.ts",
+    "demo": "npm run reset && npm run dev"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
