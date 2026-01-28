@@ -10,6 +10,7 @@ export {
   validateOptionalPositiveInteger,
   validateSafeIdentifier,
   validateGitRef,
+  validateRepoName,
   validatePath,
   validateEnum,
   escapeShellArg,

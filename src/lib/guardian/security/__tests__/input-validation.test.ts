@@ -12,6 +12,7 @@ import {
   validateOptionalPositiveInteger,
   validateSafeIdentifier,
   validateGitRef,
+  validateRepoName,
   validatePath,
   validateEnum,
   escapeShellArg,
@@ -145,6 +146,36 @@ describe("validateGitRef", () => {
 
   it("rejects empty refs", () => {
     expect(() => validateGitRef("", "test")).toThrow(ValidationError);
+  });
+});
+
+describe("validateRepoName", () => {
+  it("accepts valid repository names", () => {
+    expect(validateRepoName("owner/repo", "test")).toBe("owner/repo");
+    expect(validateRepoName("my-org/my_repo", "test")).toBe("my-org/my_repo");
+    expect(validateRepoName("user/repo.js", "test")).toBe("user/repo.js");
+    expect(validateRepoName("123/456", "test")).toBe("123/456");
+  });
+
+  it("rejects names without a slash", () => {
+    expect(() => validateRepoName("repo", "test")).toThrow(ValidationError);
+  });
+
+  it("rejects names with directory traversal segments", () => {
+    expect(() => validateRepoName("../hidden", "test")).toThrow(ValidationError);
+    expect(() => validateRepoName("owner/../hidden", "test")).toThrow(ValidationError);
+    expect(() => validateRepoName("./repo", "test")).toThrow(ValidationError);
+    expect(() => validateRepoName("owner/.", "test")).toThrow(ValidationError);
+  });
+
+  it("rejects names with invalid characters", () => {
+    expect(() => validateRepoName("owner/repo!", "test")).toThrow(ValidationError);
+    expect(() => validateRepoName("owner/repo$", "test")).toThrow(ValidationError);
+  });
+
+  it("rejects null and undefined", () => {
+    expect(() => validateRepoName(null, "test")).toThrow(ValidationError);
+    expect(() => validateRepoName(undefined, "test")).toThrow(ValidationError);
   });
 });
 

@@ -6,6 +6,7 @@ import { createLogger } from "@/lib/guardian/logger";
 import {
   validatePositiveInteger,
   validateOptionalPositiveInteger,
+  validateRepoName,
   ValidationError,
 } from "@/lib/guardian/security";
 
@@ -276,8 +277,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const repo = (data.repository as Record<string, unknown>)
-      ?.full_name as string;
+    const repo = validateRepoName(
+      (data.repository as Record<string, unknown>)?.full_name,
+      "repository.full_name"
+    );
 
     // Handle issue and PR comments
     if (event === "issue_comment" || event === "pull_request_review_comment") {

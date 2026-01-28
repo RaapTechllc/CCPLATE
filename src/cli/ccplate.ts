@@ -154,6 +154,10 @@ import {
   formatRecoveryResult,
   getPatternDBPath,
 } from "../lib/guardian/error-recovery";
+import {
+  validateSafeIdentifier,
+  ValidationError,
+} from "../lib/guardian/security";
 
 const ROOT_DIR = resolve(import.meta.dir, "../..");
 const CONFIG_PATH = join(ROOT_DIR, "ccplate.config.json");
@@ -231,16 +235,14 @@ function exec(cmd: string): string {
 }
 
 function validateTaskId(taskId: string): void {
-  // Only allow safe characters: lowercase alphanumeric, dots, underscores, hyphens
-  // Must start with alphanumeric, max 64 chars
-  const validPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/;
-  if (!validPattern.test(taskId)) {
-    console.error(`Error: Invalid task ID '${taskId}'`);
-    console.error("Task ID must:");
-    console.error("  - Start with lowercase letter or number");
-    console.error("  - Contain only lowercase letters, numbers, dots, underscores, hyphens");
-    console.error("  - Be 1-64 characters long");
-    process.exit(1);
+  try {
+    validateSafeIdentifier(taskId, "Task ID");
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      console.error(`Error: ${error.message}`);
+      process.exit(1);
+    }
+    throw error;
   }
 }
 
