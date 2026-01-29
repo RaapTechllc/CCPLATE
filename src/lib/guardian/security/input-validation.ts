@@ -53,6 +53,14 @@ const GIT_HASH_PATTERN = /^[0-9a-f]{7,40}$/;
 const GIT_BRANCH_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._\/-]{0,254}$/;
 
 /**
+ * Pattern for GitHub repository full name (owner/repo)
+ * - Owner: alphanumeric, hyphens, underscores, dots
+ * - Repo: alphanumeric, hyphens, underscores, dots
+ * - Separated by a single forward slash
+ */
+const REPO_NAME_PATTERN = /^[a-zA-Z0-9-._]+\/[a-zA-Z0-9-._]+$/;
+
+/**
  * Shell metacharacters that could enable command injection
  * Includes Windows-specific % for environment variable expansion
  */
@@ -207,6 +215,50 @@ export function validateSafeIdentifier(
       `${fieldName} contains invalid characters or format. ` +
       `Must start with lowercase letter/number, contain only lowercase letters, ` +
       `numbers, dots, underscores, hyphens, and be 1-64 characters`,
+      fieldName,
+      value
+    );
+  }
+
+  return value;
+}
+
+/**
+ * Validates a GitHub repository full name (owner/repo)
+ *
+ * @param value - The value to validate
+ * @param fieldName - Name of the field for error messages
+ * @returns The validated string
+ * @throws ValidationError if validation fails
+ *
+ * @example
+ * ```ts
+ * const repo = validateRepoName(req.body.repository.full_name, 'repo');
+ * // Returns 'owner/repo' if valid, throws ValidationError if invalid
+ * ```
+ */
+export function validateRepoName(value: unknown, fieldName: string): string {
+  if (value === undefined || value === null) {
+    throw new ValidationError(`${fieldName} is required`, fieldName, value);
+  }
+
+  if (typeof value !== "string") {
+    throw new ValidationError(`${fieldName} must be a string`, fieldName, value);
+  }
+
+  if (!REPO_NAME_PATTERN.test(value)) {
+    throw new ValidationError(
+      `${fieldName} must be in 'owner/repo' format`,
+      fieldName,
+      value
+    );
+  }
+
+  // Reject segments that are . or ..
+  const parts = value.split("/");
+  if (parts.some((part) => part === "." || part === "..")) {
+    throw new ValidationError(
+      `${fieldName} contains invalid segments (. or ..)`,
       fieldName,
       value
     );
