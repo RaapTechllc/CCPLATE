@@ -29,7 +29,8 @@
     "convex:dev": "convex dev",
     "convex:deploy": "convex deploy",
     "ccplate": "node --experimental-strip-types src/cli/ccplate.ts",
-    "guardian:webhook": "node --experimental-strip-types src/lib/guardian/adapters/github-webhook.ts"
+    "guardian:webhook": "node --experimental-strip-types src/lib/guardian/adapters/github-webhook.ts",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
