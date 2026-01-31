@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { execSync, spawnSync } from "child_process";
+import { spawnSync, type StdioOptions } from "child_process";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, resolve } from "path";
 import { createLSPClient } from "../lsp/sidecar";
@@ -200,12 +200,24 @@ function saveWorkflowState(state: WorkflowState): void {
   writeFileSync(WORKFLOW_STATE_PATH, JSON.stringify(state, null, 2) + "\n");
 }
 
-function exec(cmd: string): string {
+function exec(file: string, args: string[], options: { stdio?: StdioOptions } = {}): string {
   try {
-    return execSync(cmd, { cwd: ROOT_DIR, encoding: "utf-8" }).trim();
+    const result = spawnSync(file, args, {
+      cwd: ROOT_DIR,
+      encoding: "utf-8",
+      stdio: options.stdio || "pipe",
+      shell: false,
+    });
+
+    if (result.status !== 0) {
+      const errorMsg = (result.stderr as string)?.trim() || (result.error as Error)?.message || "Command failed";
+      throw new Error(errorMsg);
+    }
+
+    return (result.stdout as string || "").trim();
   } catch (error: unknown) {
-    const execError = error as { stderr?: string; message?: string };
-    throw new Error(execError.stderr || execError.message || "Command failed");
+    if (error instanceof Error) throw error;
+    throw new Error(String(error));
   }
 }
 
@@ -300,7 +312,7 @@ function createWorktree(taskId: string, options: { note?: string } = {}): void {
   }
 
   try {
-    exec(`git worktree add "${fullPath}" -b "${branchName}"`);
+    exec("git", ["worktree", "add", fullPath, "-b", branchName]);
     console.log(`✓ Created worktree: ${worktreePath}`);
     console.log(`✓ Created branch: ${branchName}`);
 
@@ -462,7 +474,7 @@ function cleanupOrphanWorktrees(): void {
     
     // Try to delete the branch if it exists
     try {
-      exec(`git branch -d "${wt.branch}" 2>/dev/null`);
+      exec("git", ["branch", "-d", wt.branch], { stdio: ["ignore", "ignore", "ignore"] });
       console.log(`  ✓ Deleted branch: ${wt.branch}`);
     } catch {
       // Branch may already be deleted or not merged
@@ -645,12 +657,12 @@ function cleanupWorktree(taskId: string, deleteBranch = true): void {
   const fullPath = join(ROOT_DIR, worktree.path);
 
   try {
-    exec(`git worktree remove "${fullPath}"`);
+    exec("git", ["worktree", "remove", fullPath]);
     console.log(`✓ Removed worktree: ${worktree.path}`);
 
     if (deleteBranch) {
       try {
-        exec(`git branch -d "${worktree.branch}"`);
+        exec("git", ["branch", "-d", worktree.branch]);
         console.log(`✓ Deleted branch: ${worktree.branch}`);
       } catch {
         console.log(`⚠ Branch ${worktree.branch} not deleted (may not be fully merged)`);
@@ -790,7 +802,7 @@ async function generateApi(description: string): Promise<void> {
 
 function getCurrentWorktreeId(): string {
   try {
-    const gitDir = execSync("git rev-parse --git-dir", { cwd: ROOT_DIR, encoding: "utf-8" }).trim();
+    const gitDir = exec("git", ["rev-parse", "--git-dir"]);
     if (gitDir.includes(".worktrees/")) {
       const match = gitDir.match(/\.worktrees\/([^/]+)/);
       if (match) return match[1];
@@ -2419,7 +2431,7 @@ async function main(): Promise<void> {
           process.exit(1);
         }
         try {
-          execSync(`node "${wizardPath}"`, { stdio: "inherit", cwd: ROOT_DIR });
+          exec("node", [wizardPath], { stdio: "inherit" });
         } catch {
           // Wizard handles its own errors
           process.exit(1);
