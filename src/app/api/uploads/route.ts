@@ -27,8 +27,8 @@ const uploadRateLimit = { interval: 60000, maxRequests: 20 };
 export async function POST(request: NextRequest) {
   try {
     // Check authentication
-    const { authenticated, user } = await requireAuth();
-    if (!authenticated || !user) {
+    const { authenticated, user, convex } = await requireAuth();
+    if (!authenticated || !user || !convex) {
       return NextResponse.json(
         { error: "Unauthorized", code: "UNAUTHORIZED" },
         { status: 401 }
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
       const buffer = Buffer.from(arrayBuffer);
 
       const result = await uploadFile(
-        user._id,
+        convex,
         buffer,
         file.name,
         file.type || "application/octet-stream"
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
         });
 
       const fileData = await Promise.all(fileDataPromises);
-      const results = await uploadMultiple(user._id, fileData);
+      const results = await uploadMultiple(convex, fileData);
 
       return NextResponse.json({ files: results }, { status: 201 });
     }
@@ -138,8 +138,8 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     // Check authentication
-    const { authenticated, user } = await requireAuth();
-    if (!authenticated || !user) {
+    const { authenticated, user, convex } = await requireAuth();
+    if (!authenticated || !user || !convex) {
       return NextResponse.json(
         { error: "Unauthorized", code: "UNAUTHORIZED" },
         { status: 401 }
@@ -168,7 +168,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user's files
-    const result = await getUserFiles(user._id, {
+    const result = await getUserFiles(convex, {
       page,
       limit,
       mimeType,

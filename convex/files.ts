@@ -14,19 +14,14 @@ export const getFiles = query({
       throw new Error("Unauthorized");
     }
 
-    let files;
+    let files = await ctx.db
+      .query("files")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .order("desc")
+      .collect();
+
     if (mimeType) {
-      files = await ctx.db
-        .query("files")
-        .withIndex("by_mimeType", (q) => q.eq("mimeType", mimeType))
-        .collect();
-      // Filter by userId since we indexed by mimeType
-      files = files.filter((f) => f.userId === userId);
-    } else {
-      files = await ctx.db
-        .query("files")
-        .withIndex("by_userId", (q) => q.eq("userId", userId))
-        .collect();
+      files = files.filter((file) => file.mimeType === mimeType);
     }
 
     if (!includeDeleted) {
@@ -39,15 +34,18 @@ export const getFiles = query({
 
 // Get file by ID
 export const getFileById = query({
-  args: { fileId: v.id("files") },
-  handler: async (ctx, { fileId }) => {
+  args: {
+    fileId: v.id("files"),
+    includeDeleted: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { fileId, includeDeleted }) => {
     const userId = await auth.getUserId(ctx);
     if (!userId) {
       throw new Error("Unauthorized");
     }
 
     const file = await ctx.db.get(fileId);
-    if (!file || file.deletedAt) {
+    if (!file || (!includeDeleted && file.deletedAt)) {
       return null;
     }
 
@@ -82,6 +80,8 @@ export const createFile = mutation({
       throw new Error("Unauthorized");
     }
 
+    const now = Date.now();
+
     const fileId = await ctx.db.insert("files", {
       filename,
       originalName,
@@ -90,6 +90,8 @@ export const createFile = mutation({
       url,
       storageType: storageType ?? "LOCAL",
       userId,
+      createdAt: now,
+      updatedAt: now,
     });
 
     return await ctx.db.get(fileId);
@@ -125,6 +127,7 @@ export const updateFile = mutation({
     const updates: Record<string, unknown> = {};
     if (originalName !== undefined) updates.originalName = originalName;
     if (url !== undefined) updates.url = url;
+    updates.updatedAt = Date.now();
 
     await ctx.db.patch(fileId, updates);
 
@@ -134,15 +137,18 @@ export const updateFile = mutation({
 
 // Soft delete file
 export const deleteFile = mutation({
-  args: { fileId: v.id("files") },
-  handler: async (ctx, { fileId }) => {
+  args: {
+    fileId: v.id("files"),
+    hardDelete: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { fileId, hardDelete }) => {
     const userId = await auth.getUserId(ctx);
     if (!userId) {
       throw new Error("Unauthorized");
     }
 
     const file = await ctx.db.get(fileId);
-    if (!file) {
+    if (!file || file.deletedAt) {
       throw new Error("File not found");
     }
 
@@ -154,8 +160,16 @@ export const deleteFile = mutation({
       }
     }
 
-    await ctx.db.patch(fileId, { deletedAt: Date.now() });
+    if (hardDelete) {
+      await ctx.db.delete(fileId);
+      return { success: true, deleted: "hard" };
+    }
 
-    return { success: true };
+    await ctx.db.patch(fileId, {
+      deletedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    return { success: true, deleted: "soft" };
   },
 });

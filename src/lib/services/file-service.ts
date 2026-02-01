@@ -3,8 +3,10 @@
  * Handles file upload, retrieval, and deletion operations
  */
 
+import { ConvexHttpClient } from "convex/browser";
 import { fileTypeFromBuffer } from "file-type";
-import { prisma } from "@/lib/db";
+import { api } from "../../../convex/_generated/api";
+import type { Doc } from "../../../convex/_generated/dataModel";
 import { getStorageAdapter } from "@/lib/storage";
 import {
   generateUniqueFilename,
@@ -16,8 +18,8 @@ import type {
   FileListQuery,
   PaginatedFiles,
   UploadOptions,
+  StorageType,
 } from "@/types/file";
-import { StorageType } from "@/generated/prisma/client";
 
 // Re-export constants for convenience
 export { ALLOWED_FILE_TYPES, MAX_FILE_SIZE } from "@/types/file";
@@ -34,6 +36,25 @@ export class FileServiceError extends Error {
     super(message);
     this.name = "FileServiceError";
   }
+}
+
+type FileDoc = Doc<"files">;
+
+function handleConvexError(error: unknown): never {
+  if (error instanceof Error) {
+    if (error.message.includes("Unauthorized")) {
+      throw new FileServiceError("Not authenticated", "UNAUTHORIZED", 401);
+    }
+    if (error.message.includes("Forbidden")) {
+      throw new FileServiceError(
+        "You do not have permission to access this file",
+        "FORBIDDEN",
+        403
+      );
+    }
+  }
+
+  throw error;
 }
 
 /**
@@ -76,25 +97,17 @@ async function validateFileContent(
 /**
  * Transform a database file record to API response format
  */
-function toFileResponse(file: {
-  id: string;
-  filename: string;
-  originalName: string;
-  mimeType: string;
-  size: number;
-  url: string;
-  storageType: StorageType;
-  createdAt: Date;
-}): FileResponse {
+function toFileResponse(file: FileDoc): FileResponse {
+  const createdAt = file.createdAt ?? file._creationTime;
   return {
-    id: file.id,
+    id: file._id,
     filename: file.filename,
     originalName: file.originalName,
     mimeType: file.mimeType,
     size: file.size,
     url: file.url,
     storageType: file.storageType,
-    createdAt: file.createdAt.toISOString(),
+    createdAt: new Date(createdAt).toISOString(),
   };
 }
 
@@ -120,7 +133,7 @@ function toFileResponse(file: {
  * ```
  */
 export async function uploadFile(
-  userId: string,
+  client: ConvexHttpClient,
   buffer: Buffer,
   originalName: string,
   mimeType: string,
@@ -169,19 +182,24 @@ export async function uploadFile(
   const storageType = (process.env.STORAGE_TYPE || "LOCAL") as StorageType;
 
   // Save file record to database
-  const file = await prisma.file.create({
-    data: {
+  try {
+    const file = await client.mutation(api.files.createFile, {
       filename: result.filename,
       originalName,
       mimeType,
       size: result.size,
       url: result.url,
       storageType,
-      userId,
-    },
-  });
+    });
 
-  return toFileResponse(file);
+    if (!file) {
+      throw new FileServiceError("Failed to create file record", "UPLOAD_FAILED", 500);
+    }
+
+    return toFileResponse(file);
+  } catch (error) {
+    handleConvexError(error);
+  }
 }
 
 /**
@@ -200,14 +218,14 @@ export async function uploadFile(
  * ```
  */
 export async function uploadMultiple(
-  userId: string,
+  client: ConvexHttpClient,
   files: Array<{ buffer: Buffer; originalName: string; mimeType: string }>
 ): Promise<FileResponse[]> {
   const results: FileResponse[] = [];
 
   for (const file of files) {
     const result = await uploadFile(
-      userId,
+      client,
       file.buffer,
       file.originalName,
       file.mimeType
@@ -235,40 +253,28 @@ export async function uploadMultiple(
  * ```
  */
 export async function getUserFiles(
-  userId: string,
+  client: ConvexHttpClient,
   query: FileListQuery = {}
 ): Promise<PaginatedFiles> {
   const page = Math.max(1, query.page ?? 1);
   const limit = Math.min(100, Math.max(1, query.limit ?? 20));
   const skip = (page - 1) * limit;
 
-  // Build where clause
-  const where: {
-    userId: string;
-    deletedAt: null;
-    mimeType?: string;
-  } = {
-    userId,
-    deletedAt: null,
-  };
-
-  if (query.mimeType) {
-    where.mimeType = query.mimeType;
+  let files: FileDoc[] = [];
+  try {
+    files = await client.query(api.files.getFiles, {
+      mimeType: query.mimeType,
+      includeDeleted: false,
+    });
+  } catch (error) {
+    handleConvexError(error);
   }
 
-  // Get files and total count in parallel
-  const [files, total] = await Promise.all([
-    prisma.file.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      skip,
-      take: limit,
-    }),
-    prisma.file.count({ where }),
-  ]);
+  const total = files.length;
+  const pagedFiles = files.slice(skip, skip + limit);
 
   return {
-    files: files.map(toFileResponse),
+    files: pagedFiles.map(toFileResponse),
     pagination: {
       page,
       limit,
@@ -281,167 +287,83 @@ export async function getUserFiles(
 /**
  * Get a single file by ID
  *
+ * @param client - Authenticated Convex client
  * @param fileId - ID of the file to retrieve
  * @returns File information or null if not found
  *
  * @example
  * ```ts
- * const file = await getFile("file123");
+ * const file = await getFile(client, "file123");
  * if (file) {
  *   console.log(file.url);
  * }
  * ```
  */
-export async function getFile(fileId: string): Promise<FileResponse | null> {
-  const file = await prisma.file.findFirst({
-    where: {
-      id: fileId,
-      deletedAt: null,
-    },
-  });
-
-  if (!file) {
-    return null;
-  }
-
-  return toFileResponse(file);
-}
-
-/**
- * Permanently delete a file (hard delete)
- * Removes file from both storage and database
- *
- * @param fileId - ID of the file to delete
- * @param userId - ID of the user requesting deletion (for ownership check)
- * @throws FileServiceError if file not found or user doesn't own the file
- *
- * @example
- * ```ts
- * await deleteFile("file123", "user123");
- * ```
- */
-export async function deleteFile(fileId: string, userId: string): Promise<void> {
-  // Find the file
-  const file = await prisma.file.findFirst({
-    where: {
-      id: fileId,
-      deletedAt: null,
-    },
-  });
-
-  if (!file) {
-    throw new FileServiceError("File not found", "FILE_NOT_FOUND", 404);
-  }
-
-  // Check ownership (allow if user owns the file)
-  if (file.userId !== userId) {
-    throw new FileServiceError(
-      "You do not have permission to delete this file",
-      "FORBIDDEN",
-      403
-    );
-  }
-
-  // Delete from storage
-  const storage = getStorageAdapter();
+export async function getFile(
+  client: ConvexHttpClient,
+  fileId: string
+): Promise<FileResponse | null> {
   try {
-    await storage.delete(file.filename);
+    const file = await client.query(api.files.getFileById, {
+      fileId,
+      includeDeleted: false,
+    });
+
+    return file ? toFileResponse(file) : null;
   } catch (error) {
-    // Log error but continue with database deletion
-    console.error(`Failed to delete file from storage: ${file.filename}`, error);
+    handleConvexError(error);
   }
-
-  // Delete from database
-  await prisma.file.delete({
-    where: { id: fileId },
-  });
 }
 
 /**
- * Soft delete a file (marks as deleted but keeps in storage)
- * Useful for recovery and audit purposes
+ * Delete a file (soft or hard delete)
+ * Hard delete removes file from both storage and database
  *
- * @param fileId - ID of the file to soft delete
- * @param userId - ID of the user requesting deletion
- * @throws FileServiceError if file not found or user doesn't own the file
- *
- * @example
- * ```ts
- * await softDeleteFile("file123", "user123");
- * ```
- */
-export async function softDeleteFile(
-  fileId: string,
-  userId: string
-): Promise<void> {
-  // Find the file
-  const file = await prisma.file.findFirst({
-    where: {
-      id: fileId,
-      deletedAt: null,
-    },
-  });
-
-  if (!file) {
-    throw new FileServiceError("File not found", "FILE_NOT_FOUND", 404);
-  }
-
-  // Check ownership
-  if (file.userId !== userId) {
-    throw new FileServiceError(
-      "You do not have permission to delete this file",
-      "FORBIDDEN",
-      403
-    );
-  }
-
-  // Soft delete by setting deletedAt
-  await prisma.file.update({
-    where: { id: fileId },
-    data: { deletedAt: new Date() },
-  });
-}
-
-/**
- * Delete file with admin privileges (can delete any user's file)
- *
+ * @param client - Authenticated Convex client
  * @param fileId - ID of the file to delete
  * @param hardDelete - Whether to permanently delete or soft delete
- * @throws FileServiceError if file not found
+ * @throws FileServiceError if file not found or user doesn't own the file
+ *
+ * @example
+ * ```ts
+ * await deleteFile(client, "file123", true);
+ * ```
  */
-export async function adminDeleteFile(
+export async function deleteFile(
+  client: ConvexHttpClient,
   fileId: string,
   hardDelete: boolean = false
 ): Promise<void> {
-  const file = await prisma.file.findFirst({
-    where: {
-      id: fileId,
-      deletedAt: null,
-    },
-  });
+  let file: FileDoc | null = null;
+
+  try {
+    file = await client.query(api.files.getFileById, {
+      fileId,
+      includeDeleted: false,
+    });
+  } catch (error) {
+    handleConvexError(error);
+  }
 
   if (!file) {
     throw new FileServiceError("File not found", "FILE_NOT_FOUND", 404);
   }
 
   if (hardDelete) {
-    // Delete from storage
     const storage = getStorageAdapter();
     try {
       await storage.delete(file.filename);
     } catch (error) {
       console.error(`Failed to delete file from storage: ${file.filename}`, error);
     }
+  }
 
-    // Delete from database
-    await prisma.file.delete({
-      where: { id: fileId },
+  try {
+    await client.mutation(api.files.deleteFile, {
+      fileId,
+      hardDelete,
     });
-  } else {
-    // Soft delete
-    await prisma.file.update({
-      where: { id: fileId },
-      data: { deletedAt: new Date() },
-    });
+  } catch (error) {
+    handleConvexError(error);
   }
 }

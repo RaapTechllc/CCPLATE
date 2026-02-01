@@ -42,6 +42,7 @@ const mainLinks = [
 ];
 
 const builderLinks = [
+  { href: "/feature-builder", label: "Feature Builder" },
   { href: "/hook-builder", label: "Hook Builder" },
   { href: "/prompt-builder", label: "Prompt Builder" },
   { href: "/agent-builder", label: "Agent Builder" },

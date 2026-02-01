@@ -5,6 +5,11 @@ import { Providers } from "@/components/providers";
 import { Toaster } from "@/components/ui/toaster";
 import { ClientHeader } from "@/components/layout/client-header";
 
+// Initialize Sentry on the client side
+if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_SENTRY_DSN) {
+  void import("@/lib/sentry").then(({ initSentry }) => initSentry());
+}
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -16,8 +21,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CCPLATE - Next.js Boilerplate",
-  description: "A production-ready Next.js boilerplate with TypeScript, Prisma, and Convex",
+  title: "CCPLATE - AI-Powered Development Platform",
+  description: "A SaaS boilerplate with AI-powered developer tooling and multi-agent orchestration",
 };
 
 export default function RootLayout({

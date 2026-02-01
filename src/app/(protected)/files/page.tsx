@@ -18,16 +18,16 @@ interface Props {
 }
 
 export default async function FilesPage({ searchParams }: Props) {
-  const { authenticated, user } = await requireAuth();
+  const { authenticated, user, convex } = await requireAuth();
 
-  if (!authenticated || !user) {
+  if (!authenticated || !user || !convex) {
     redirect("/login");
   }
 
   const params = await searchParams;
   const page = parseInt(params.page || "1", 10);
 
-  const { files, pagination } = await getUserFiles(user._id, {
+  const { files, pagination } = await getUserFiles(convex, {
     page,
     limit: 20,
   });

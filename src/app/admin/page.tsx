@@ -1,6 +1,8 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+import { redirect } from "next/navigation";
+import { requireAdmin } from "@/lib/auth";
 import { getDashboardStats, getUsers } from "@/lib/services/admin-service";
 import { StatsCard } from "@/components/admin/stats-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,10 +39,20 @@ function formatRelativeTime(dateString: string): string {
 }
 
 export default async function AdminDashboardPage() {
+  const { authenticated, user, isAdmin, convex } = await requireAdmin();
+  if (!authenticated || !user || !isAdmin || !convex) {
+    redirect("/login");
+  }
+
   // Fetch data in parallel
   const [stats, recentUsersData] = await Promise.all([
-    getDashboardStats(),
-    getUsers({ page: 1, limit: 5, sortBy: "createdAt", sortOrder: "desc" }),
+    getDashboardStats(convex),
+    getUsers(convex, {
+      page: 1,
+      limit: 5,
+      sortBy: "createdAt",
+      sortOrder: "desc",
+    }),
   ]);
 
   return (

@@ -1,10 +1,10 @@
 import { NextRequest } from "next/server";
 import { ZodError } from "zod";
-import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { ApiError } from "@/lib/api/errors";
 import { paginationSchema } from "@/lib/validations/common";
+import { getUsers } from "@/lib/services/admin-service";
 
 /**
  * Handle errors consistently across all route handlers
@@ -43,8 +43,8 @@ function handleError(error: unknown) {
 export async function GET(request: NextRequest) {
   try {
     // Check authentication and admin role
-    const { authenticated, user, isAdmin } = await requireAdmin();
-    if (!authenticated || !user) {
+    const { authenticated, user, isAdmin, convex } = await requireAdmin();
+    if (!authenticated || !user || !convex) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
     if (!isAdmin) {
@@ -58,37 +58,11 @@ export async function GET(request: NextRequest) {
       limit: searchParams.get("limit") ?? 10,
     });
 
-    // Calculate offset
-    const skip = (page - 1) * limit;
-
-    // Fetch users and total count in parallel
-    const [users, total] = await Promise.all([
-      prisma.user.findMany({
-        where: {
-          deletedAt: null, // Exclude soft-deleted users
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          emailVerified: true,
-          image: true,
-          role: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-        skip,
-        take: limit,
-      }),
-      prisma.user.count({
-        where: {
-          deletedAt: null,
-        },
-      }),
-    ]);
+    const { users, total } = await getUsers(convex, {
+      page,
+      limit,
+      status: "active",
+    });
 
     // Calculate total pages
     const totalPages = Math.ceil(total / limit);

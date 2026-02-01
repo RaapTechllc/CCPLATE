@@ -52,19 +52,19 @@ export const test = base.extend<{
   adminPage: Page;
 }>({
   // Placeholder - requires OAuth mocking
-  authenticatedPage: async ({ page }, use) => {
+  authenticatedPage: async ({ page }, applyFixture) => {
     // Without OAuth mocking, we can't authenticate
     // Tests using this fixture should check isAuthenticated() and skip if false
     console.warn("authenticatedPage fixture: OAuth mocking not implemented, using unauthenticated page");
-    await use(page);
+    await applyFixture(page);
   },
 
   // Placeholder - requires OAuth mocking
-  adminPage: async ({ browser }, use) => {
+  adminPage: async ({ browser }, applyFixture) => {
     const context = await browser.newContext();
     const page = await context.newPage();
     console.warn("adminPage fixture: OAuth mocking not implemented, using unauthenticated page");
-    await use(page);
+    await applyFixture(page);
     await context.close();
   },
 });

@@ -3,8 +3,8 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireAuth } from "@/lib/auth";
-import { prisma } from "@/lib/db";
 import { uploadFile } from "@/lib/services/file-service";
+import { api } from "../../../convex/_generated/api";
 
 const updateNameSchema = z.object({
   name: z.string().min(1, "Name is required").max(100, "Name is too long"),
@@ -17,25 +17,15 @@ export async function updateNameAction(
   name: string
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const { authenticated, user } = await requireAuth();
-    if (!authenticated || !user) {
+    const { authenticated, user, convex } = await requireAuth();
+    if (!authenticated || !user || !convex) {
       return { success: false, message: "You must be logged in." };
     }
 
     const validated = updateNameSchema.parse({ name });
 
-    // Find user by email (linking Convex user to Prisma user)
-    const prismaUser = await prisma.user.findFirst({
-      where: { email: user.email, deletedAt: null },
-    });
-
-    if (!prismaUser) {
-      return { success: false, message: "User not found." };
-    }
-
-    await prisma.user.update({
-      where: { id: prismaUser.id },
-      data: { name: validated.name },
+    await convex.mutation(api.users.updateProfile, {
+      name: validated.name,
     });
 
     revalidatePath("/profile");
@@ -71,8 +61,8 @@ export async function updateAvatarAction(
   formData: FormData
 ): Promise<{ success: boolean; message: string; imageUrl?: string }> {
   try {
-    const { authenticated, user } = await requireAuth();
-    if (!authenticated || !user) {
+    const { authenticated, user, convex } = await requireAuth();
+    if (!authenticated || !user || !convex) {
       return { success: false, message: "You must be logged in." };
     }
 
@@ -94,28 +84,13 @@ export async function updateAvatarAction(
       return { success: false, message: "File is too large. Maximum size is 5MB." };
     }
 
-    // Find user by email (linking Convex user to Prisma user)
-    const prismaUser = await prisma.user.findFirst({
-      where: { email: user.email, deletedAt: null },
-    });
-
-    if (!prismaUser) {
-      return { success: false, message: "User not found." };
-    }
-
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const uploadedFile = await uploadFile(
-      prismaUser.id,
-      buffer,
-      file.name,
-      file.type
-    );
+    const uploadedFile = await uploadFile(convex, buffer, file.name, file.type);
 
-    await prisma.user.update({
-      where: { id: prismaUser.id },
-      data: { image: uploadedFile.url },
+    await convex.mutation(api.users.updateProfile, {
+      image: uploadedFile.url,
     });
 
     revalidatePath("/profile");

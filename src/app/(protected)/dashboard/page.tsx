@@ -13,13 +13,13 @@ export const metadata: Metadata = {
 };
 
 export default async function DashboardPage() {
-  const { authenticated, user } = await requireAuth();
+  const { authenticated, user, convex } = await requireAuth();
 
-  if (!authenticated || !user) {
+  if (!authenticated || !user || !convex) {
     redirect("/login");
   }
 
-  const stats = await getDashboardStats(user._id);
+  const stats = await getDashboardStats(convex);
 
   return (
     <div className="container mx-auto px-4 py-8">

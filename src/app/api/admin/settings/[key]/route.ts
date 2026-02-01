@@ -47,8 +47,8 @@ function handleError(error: unknown) {
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
     // Check authentication and admin role
-    const { authenticated, user, isAdmin } = await requireAdmin();
-    if (!authenticated || !user) {
+    const { authenticated, user, isAdmin, convex } = await requireAdmin();
+    if (!authenticated || !user || !convex) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
     if (!isAdmin) {
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const { key: settingKey } = settingKeySchema.parse({ key });
 
     // Get setting
-    const setting = await getByKey(settingKey);
+    const setting = await getByKey(convex, settingKey);
 
     if (!setting) {
       return errorResponse("NOT_FOUND", "Setting not found", 404);
@@ -79,8 +79,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
     // Check authentication and admin role
-    const { authenticated, user, isAdmin } = await requireAdmin();
-    if (!authenticated || !user) {
+    const { authenticated, user, isAdmin, convex } = await requireAdmin();
+    if (!authenticated || !user || !convex) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
     if (!isAdmin) {
@@ -96,7 +96,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const { value, type } = settingUpdateSchema.parse(body);
 
     // Update setting (creates if doesn't exist)
-    const updatedSetting = await update(settingKey, value, type);
+    const updatedSetting = await update(convex, settingKey, value, type);
 
     return successResponse(updatedSetting);
   } catch (error) {

@@ -53,8 +53,8 @@ function handleError(error: unknown) {
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
     // Check authentication and admin role
-    const { authenticated, user, isAdmin } = await requireAdmin();
-    if (!authenticated || !user) {
+    const { authenticated, user, isAdmin, convex } = await requireAdmin();
+    if (!authenticated || !user || !convex) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
     if (!isAdmin) {
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const { id: userId } = userIdSchema.parse({ id });
 
     // Get user
-    const targetUser = await getUser(userId);
+    const targetUser = await getUser(convex, userId);
 
     if (!targetUser) {
       return errorResponse("NOT_FOUND", "User not found", 404);
@@ -85,8 +85,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
     // Check authentication and admin role
-    const { authenticated, user, isAdmin } = await requireAdmin();
-    if (!authenticated || !user) {
+    const { authenticated, user, isAdmin, convex } = await requireAdmin();
+    if (!authenticated || !user || !convex) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
     if (!isAdmin) {
@@ -102,14 +102,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const validatedData = userUpdateSchema.parse(body);
 
     // Check if user exists
-    const existingUser = await getUser(userId);
+    const existingUser = await getUser(convex, userId);
     if (!existingUser) {
       return errorResponse("NOT_FOUND", "User not found", 404);
     }
 
     // If email is being changed, check for duplicates
     if (validatedData.email && validatedData.email !== existingUser.email) {
-      const isDuplicate = await emailInUse(validatedData.email, userId);
+      const isDuplicate = await emailInUse(convex, validatedData.email, userId);
       if (isDuplicate) {
         return errorResponse("VALIDATION_ERROR", "Email already in use", 400);
       }
@@ -129,7 +129,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     // Update user
-    const updatedUser = await updateUser(userId, validatedData);
+    const updatedUser = await updateUser(convex, userId, validatedData);
 
     return successResponse(updatedUser);
   } catch (error) {
@@ -144,8 +144,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
     // Check authentication and admin role
-    const { authenticated, user, isAdmin } = await requireAdmin();
-    if (!authenticated || !user) {
+    const { authenticated, user, isAdmin, convex } = await requireAdmin();
+    if (!authenticated || !user || !convex) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
     if (!isAdmin) {
@@ -157,7 +157,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     const { id: userId } = userIdSchema.parse({ id });
 
     // Check if user exists
-    const targetUser = await getUser(userId);
+    const targetUser = await getUser(convex, userId);
     if (!targetUser) {
       return errorResponse("NOT_FOUND", "User not found", 404);
     }
@@ -173,7 +173,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }
 
     // Soft delete user
-    await deleteUser(userId);
+    await deleteUser(convex, userId);
 
     return successResponse({ message: "User deleted successfully" });
   } catch (error) {
@@ -189,8 +189,8 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
     // Check authentication and admin role
-    const { authenticated, user, isAdmin } = await requireAdmin();
-    if (!authenticated || !user) {
+    const { authenticated, user, isAdmin, convex } = await requireAdmin();
+    if (!authenticated || !user || !convex) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
     if (!isAdmin) {
@@ -209,7 +209,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     // Check if user exists
-    const targetUser = await getUser(userId);
+    const targetUser = await getUser(convex, userId);
     if (!targetUser) {
       return errorResponse("NOT_FOUND", "User not found", 404);
     }
@@ -220,7 +220,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     // Restore user
-    const restoredUser = await restoreUser(userId);
+    const restoredUser = await restoreUser(convex, userId);
 
     return successResponse(restoredUser);
   } catch (error) {

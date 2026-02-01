@@ -1,9 +1,10 @@
 import { NextRequest } from "next/server";
 import { ZodError, z } from "zod";
-import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { ApiError } from "@/lib/api/errors";
+import { api } from "../../../../../convex/_generated/api";
+import type { Doc } from "../../../../../convex/_generated/dataModel";
 
 // Schema for updating own profile
 const updateProfileSchema = z.object({
@@ -42,48 +43,39 @@ function handleError(error: unknown) {
   return errorResponse("INTERNAL_ERROR", "An unexpected error occurred", 500);
 }
 
+type UserDoc = Doc<"users">;
+
+function toProfileResponse(user: UserDoc) {
+  const createdAt = user.createdAt ?? user._creationTime;
+  const updatedAt = user.updatedAt ?? createdAt;
+  return {
+    id: user._id,
+    name: user.name ?? null,
+    email: user.email ?? "",
+    emailVerified: user.emailVerificationTime
+      ? new Date(user.emailVerificationTime).toISOString()
+      : null,
+    image: user.image ?? null,
+    role: user.role ?? "USER",
+    createdAt: new Date(createdAt).toISOString(),
+    updatedAt: new Date(updatedAt).toISOString(),
+  };
+}
+
 /**
  * GET /api/users/me
  * Get the current user's profile
  */
 export async function GET() {
   try {
-    const { authenticated, user } = await requireAuth();
-    if (!authenticated || !user) {
+    const { authenticated, user, convex } = await requireAuth();
+    if (!authenticated || !user || !convex) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
+    const currentUser =
+      (await convex.query(api.users.getCurrentUser, {})) ?? (user as UserDoc);
 
-    // Fetch current user from Prisma using Convex user's email
-    // Note: In a full Convex migration, this would query Convex directly
-    const prismaUser = await prisma.user.findFirst({
-      where: {
-        email: user.email,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        emailVerified: true,
-        image: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-
-    if (!prismaUser) {
-      // Return Convex user data if no Prisma user found
-      return successResponse({
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        image: user.image,
-        role: user.role,
-      });
-    }
-
-    return successResponse(prismaUser);
+    return successResponse(toProfileResponse(currentUser));
   } catch (error) {
     return handleError(error);
   }
@@ -95,8 +87,8 @@ export async function GET() {
  */
 export async function PATCH(request: NextRequest) {
   try {
-    const { authenticated, user } = await requireAuth();
-    if (!authenticated || !user) {
+    const { authenticated, user, convex } = await requireAuth();
+    if (!authenticated || !user || !convex) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
 
@@ -104,22 +96,10 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     const validatedData = updateProfileSchema.parse(body);
 
-    // Find user by email
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        email: user.email,
-        deletedAt: null,
-      },
-    });
-
-    if (!existingUser) {
-      return errorResponse("NOT_FOUND", "User not found", 404);
-    }
-
-    // If email is being changed, check for duplicates
-    if (validatedData.email && validatedData.email !== existingUser.email) {
-      const emailExists = await prisma.user.findUnique({
-        where: { email: validatedData.email },
+    if (validatedData.email && validatedData.email !== user.email) {
+      const emailExists = await convex.query(api.users.emailInUse, {
+        email: validatedData.email,
+        excludeUserId: user._id,
       });
 
       if (emailExists) {
@@ -127,23 +107,13 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    // Update user
-    const updatedUser = await prisma.user.update({
-      where: { id: existingUser.id },
-      data: validatedData,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        emailVerified: true,
-        image: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+    const updatedUser = await convex.mutation(api.users.updateProfile, {
+      name: validatedData.name,
+      email: validatedData.email,
+      image: validatedData.image ?? undefined,
     });
 
-    return successResponse(updatedUser);
+    return successResponse(toProfileResponse(updatedUser as UserDoc));
   } catch (error) {
     return handleError(error);
   }

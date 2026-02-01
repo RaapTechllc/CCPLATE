@@ -1,4 +1,6 @@
-import { prisma } from "@/lib/db";
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "../../../convex/_generated/api";
+import type { Doc } from "../../../convex/_generated/dataModel";
 
 interface DashboardStats {
   totalFiles: number;
@@ -13,32 +15,29 @@ interface DashboardStats {
   memberSince: Date;
 }
 
-export async function getDashboardStats(userId: string): Promise<DashboardStats> {
-  const [filesData, user] = await Promise.all([
-    prisma.file.findMany({
-      where: {
-        userId,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        originalName: true,
-        mimeType: true,
-        size: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.user.findUnique({
-      where: { id: userId },
-      select: { createdAt: true },
-    }),
-  ]);
+type FileDoc = Doc<"files">;
+type UserDoc = Doc<"users">;
+
+export async function getDashboardStats(
+  client: ConvexHttpClient
+): Promise<DashboardStats> {
+  const [filesData, user] = (await Promise.all([
+    client.query(api.files.getFiles, { includeDeleted: false }),
+    client.query(api.users.getCurrentUser, {}),
+  ])) as [FileDoc[], UserDoc | null];
 
   const totalFiles = filesData.length;
   const storageUsedBytes = filesData.reduce((sum, file) => sum + file.size, 0);
-  const recentFiles = filesData.slice(0, 5);
-  const memberSince = user?.createdAt || new Date();
+  const recentFiles = filesData.slice(0, 5).map((file) => ({
+    id: file._id,
+    originalName: file.originalName,
+    mimeType: file.mimeType,
+    size: file.size,
+    createdAt: new Date(file.createdAt ?? file._creationTime),
+  }));
+  const memberSince = new Date(
+    user?.createdAt ?? user?._creationTime ?? Date.now()
+  );
 
   return {
     totalFiles,

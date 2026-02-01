@@ -1,10 +1,11 @@
 import { NextRequest } from "next/server";
 import { ZodError, z } from "zod";
-import { prisma } from "@/lib/db";
 import { requireAuth, requireAdmin } from "@/lib/auth";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { ApiError } from "@/lib/api/errors";
 import { idSchema } from "@/lib/validations/common";
+import { api } from "../../../../../convex/_generated/api";
+import type { Doc } from "../../../../../convex/_generated/dataModel";
 
 // Schema for user updates
 const updateUserSchema = z.object({
@@ -48,6 +49,25 @@ function handleError(error: unknown) {
   return errorResponse("INTERNAL_ERROR", "An unexpected error occurred", 500);
 }
 
+type UserDoc = Doc<"users">;
+
+function toUserResponse(user: UserDoc) {
+  const createdAt = user.createdAt ?? user._creationTime;
+  const updatedAt = user.updatedAt ?? createdAt;
+  return {
+    id: user._id,
+    name: user.name ?? null,
+    email: user.email ?? "",
+    emailVerified: user.emailVerificationTime
+      ? new Date(user.emailVerificationTime).toISOString()
+      : null,
+    image: user.image ?? null,
+    role: user.role ?? "USER",
+    createdAt: new Date(createdAt).toISOString(),
+    updatedAt: new Date(updatedAt).toISOString(),
+  };
+}
+
 /**
  * GET /api/users/[id]
  * Get a user by ID (self or admin only)
@@ -57,8 +77,8 @@ export async function GET(
   context: RouteContext
 ) {
   try {
-    const { authenticated, user } = await requireAuth();
-    if (!authenticated || !user) {
+    const { authenticated, user, convex } = await requireAuth();
+    if (!authenticated || !user || !convex) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
 
@@ -74,29 +94,16 @@ export async function GET(
       return errorResponse("FORBIDDEN", "You can only view your own profile", 403);
     }
 
-    // Fetch user
-    const targetUser = await prisma.user.findUnique({
-      where: {
-        id: userId,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        emailVerified: true,
-        image: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+    const targetUser = await convex.query(api.users.getUserById, {
+      userId,
+      includeDeleted: false,
     });
 
     if (!targetUser) {
       return errorResponse("NOT_FOUND", "User not found", 404);
     }
 
-    return successResponse(targetUser);
+    return successResponse(toUserResponse(targetUser));
   } catch (error) {
     return handleError(error);
   }
@@ -111,8 +118,8 @@ export async function PATCH(
   context: RouteContext
 ) {
   try {
-    const { authenticated, user } = await requireAuth();
-    if (!authenticated || !user) {
+    const { authenticated, user, convex } = await requireAuth();
+    if (!authenticated || !user || !convex) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
 
@@ -138,11 +145,9 @@ export async function PATCH(
     }
 
     // Check if user exists and is not deleted
-    const existingUser = await prisma.user.findUnique({
-      where: {
-        id: userId,
-        deletedAt: null,
-      },
+    const existingUser = await convex.query(api.users.getUserById, {
+      userId,
+      includeDeleted: false,
     });
 
     if (!existingUser) {
@@ -151,8 +156,9 @@ export async function PATCH(
 
     // If email is being changed, check for duplicates
     if (validatedData.email && validatedData.email !== existingUser.email) {
-      const emailExists = await prisma.user.findUnique({
-        where: { email: validatedData.email },
+      const emailExists = await convex.query(api.users.emailInUse, {
+        email: validatedData.email,
+        excludeUserId: userId,
       });
 
       if (emailExists) {
@@ -160,23 +166,15 @@ export async function PATCH(
       }
     }
 
-    // Update user
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: validatedData,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        emailVerified: true,
-        image: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+    const updatedUser = await convex.mutation(api.users.updateUser, {
+      userId,
+      name: validatedData.name,
+      email: validatedData.email,
+      image: validatedData.image ?? undefined,
+      role: validatedData.role,
     });
 
-    return successResponse(updatedUser);
+    return successResponse(toUserResponse(updatedUser as UserDoc));
   } catch (error) {
     return handleError(error);
   }
@@ -191,8 +189,8 @@ export async function DELETE(
   context: RouteContext
 ) {
   try {
-    const { authenticated, user, isAdmin } = await requireAdmin();
-    if (!authenticated || !user) {
+    const { authenticated, user, isAdmin, convex } = await requireAdmin();
+    if (!authenticated || !user || !convex) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
     if (!isAdmin) {
@@ -204,11 +202,9 @@ export async function DELETE(
     const userId = idSchema.parse(id);
 
     // Check if user exists and is not already deleted
-    const targetUser = await prisma.user.findUnique({
-      where: {
-        id: userId,
-        deletedAt: null,
-      },
+    const targetUser = await convex.query(api.users.getUserById, {
+      userId,
+      includeDeleted: false,
     });
 
     if (!targetUser) {
@@ -221,10 +217,7 @@ export async function DELETE(
     }
 
     // Soft delete by setting deletedAt timestamp
-    await prisma.user.update({
-      where: { id: userId },
-      data: { deletedAt: new Date() },
-    });
+    await convex.mutation(api.users.deleteUser, { userId });
 
     return successResponse({ message: "User deleted successfully" });
   } catch (error) {

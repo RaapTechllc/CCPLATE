@@ -10,15 +10,21 @@ export default defineSchema({
   // Users table - extends auth users with app-specific fields
   users: defineTable({
     name: v.optional(v.string()),
+    image: v.optional(v.string()),
     email: v.optional(v.string()),
     emailVerificationTime: v.optional(v.float64()),
-    image: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    phoneVerificationTime: v.optional(v.float64()),
+    isAnonymous: v.optional(v.boolean()),
     // App-specific fields
     role: v.optional(v.union(v.literal("USER"), v.literal("ADMIN"))),
     lastLoginAt: v.optional(v.float64()),
     deletedAt: v.optional(v.float64()),
+    createdAt: v.optional(v.float64()),
+    updatedAt: v.optional(v.float64()),
   })
-    .index("by_email", ["email"])
+    .index("email", ["email"])
+    .index("phone", ["phone"])
     .index("by_deletedAt", ["deletedAt"]),
 
   // Files table - file metadata storage
@@ -35,6 +41,8 @@ export default defineSchema({
     ),
     userId: v.id("users"),
     deletedAt: v.optional(v.float64()),
+    createdAt: v.optional(v.float64()),
+    updatedAt: v.optional(v.float64()),
   })
     .index("by_userId", ["userId"])
     .index("by_mimeType", ["mimeType"])
@@ -51,7 +59,23 @@ export default defineSchema({
       v.literal("JSON")
     ),
     category: v.string(),
+    createdAt: v.optional(v.float64()),
+    updatedAt: v.optional(v.float64()),
   })
     .index("by_key", ["key"])
     .index("by_category", ["category"]),
+
+  // Builder analytics events (feature generation, apply actions, etc.)
+  builderAnalytics: defineTable({
+    userId: v.id("users"),
+    builder: v.string(),
+    eventType: v.string(),
+    featureName: v.optional(v.string()),
+    estimatedMinutesSaved: v.optional(v.number()),
+    durationMs: v.optional(v.number()),
+    createdAt: v.float64(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_eventType", ["eventType"])
+    .index("by_builder", ["builder"]),
 });

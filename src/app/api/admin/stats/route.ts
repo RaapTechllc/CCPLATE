@@ -41,8 +41,8 @@ function handleError(error: unknown) {
 export async function GET() {
   try {
     // Check authentication and admin role
-    const { authenticated, user, isAdmin } = await requireAdmin();
-    if (!authenticated || !user) {
+    const { authenticated, user, isAdmin, convex } = await requireAdmin();
+    if (!authenticated || !user || !convex) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
     if (!isAdmin) {
@@ -50,7 +50,7 @@ export async function GET() {
     }
 
     // Get dashboard stats
-    const stats = await getDashboardStats();
+    const stats = await getDashboardStats(convex);
 
     return successResponse(stats);
   } catch (error) {

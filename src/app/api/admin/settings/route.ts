@@ -54,8 +54,8 @@ export async function GET(request: NextRequest) {
 
   try {
     // Check authentication and admin role
-    const { authenticated, user, isAdmin } = await requireAdmin();
-    if (!authenticated || !user) {
+    const { authenticated, user, isAdmin, convex } = await requireAdmin();
+    if (!authenticated || !user || !convex) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
     if (!isAdmin) {
@@ -67,11 +67,11 @@ export async function GET(request: NextRequest) {
     const grouped = searchParams.get("grouped") === "true";
 
     if (grouped) {
-      const settingsByCategory = await getAllGrouped();
+      const settingsByCategory = await getAllGrouped(convex);
       return successResponse(settingsByCategory);
     }
 
-    const settings = await getAll();
+    const settings = await getAll(convex);
     return successResponse(settings);
   } catch (error) {
     return handleError(error);
@@ -92,8 +92,8 @@ export async function PUT(request: NextRequest) {
 
   try {
     // Check authentication and admin role
-    const { authenticated, user, isAdmin } = await requireAdmin();
-    if (!authenticated || !user) {
+    const { authenticated, user, isAdmin, convex } = await requireAdmin();
+    if (!authenticated || !user || !convex) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
     if (!isAdmin) {
@@ -109,13 +109,13 @@ export async function PUT(request: NextRequest) {
     }
 
     // Fetch current settings for audit comparison
-    const currentSettings = await getAll();
+    const currentSettings = await getAll(convex);
     const currentSettingsMap = new Map(
       currentSettings.map((s) => [s.key, s.value])
     );
 
     // Bulk update settings
-    const updatedSettings = await bulkUpdate(settingsToUpdate);
+    const updatedSettings = await bulkUpdate(convex, settingsToUpdate);
 
     // Build audit log changes
     const changes: Record<string, { old: unknown; new: unknown }> = {};

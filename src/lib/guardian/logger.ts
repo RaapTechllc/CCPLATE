@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { join } from "path";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
@@ -131,8 +131,7 @@ export function parseLogEntries(
     return [];
   }
 
-  const fs = require("fs");
-  const content = fs.readFileSync(logFile, "utf-8");
+  const content = readFileSync(logFile, "utf-8");
   const lines = content.split("\n").filter(Boolean);
 
   let entries: LogEntry[] = [];

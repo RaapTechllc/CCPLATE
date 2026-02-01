@@ -19,14 +19,24 @@ export const getSettings = query({
       throw new Error("Forbidden: Admin access required");
     }
 
+    let settings;
     if (category) {
-      return await ctx.db
+      settings = await ctx.db
         .query("systemSettings")
         .withIndex("by_category", (q) => q.eq("category", category))
         .collect();
+    } else {
+      settings = await ctx.db.query("systemSettings").collect();
     }
 
-    return await ctx.db.query("systemSettings").collect();
+    settings.sort((a, b) => {
+      if (a.category !== b.category) {
+        return a.category.localeCompare(b.category);
+      }
+      return a.key.localeCompare(b.key);
+    });
+
+    return settings;
   },
 });
 
@@ -80,24 +90,103 @@ export const upsertSetting = mutation({
       .withIndex("by_key", (q) => q.eq("key", key))
       .first();
 
+    const now = Date.now();
+
     if (existing) {
-      // Update existing
       await ctx.db.patch(existing._id, {
         value,
         ...(type && { type }),
         ...(category && { category }),
+        updatedAt: now,
       });
       return await ctx.db.get(existing._id);
-    } else {
-      // Create new
-      const id = await ctx.db.insert("systemSettings", {
-        key,
-        value,
-        type: type ?? "STRING",
-        category: category ?? "general",
-      });
-      return await ctx.db.get(id);
     }
+
+    const id = await ctx.db.insert("systemSettings", {
+      key,
+      value,
+      type: type ?? "STRING",
+      category: category ?? "general",
+      createdAt: now,
+      updatedAt: now,
+    });
+    return await ctx.db.get(id);
+  },
+});
+
+export const bulkUpsertSettings = mutation({
+  args: {
+    settings: v.array(
+      v.object({
+        key: v.string(),
+        value: v.string(),
+        type: v.optional(
+          v.union(
+            v.literal("STRING"),
+            v.literal("NUMBER"),
+            v.literal("BOOLEAN"),
+            v.literal("JSON")
+          )
+        ),
+        category: v.optional(v.string()),
+      })
+    ),
+  },
+  handler: async (ctx, { settings }) => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) {
+      throw new Error("Unauthorized");
+    }
+
+    const user = await ctx.db.get(userId);
+    if (!user || user.role !== "ADMIN") {
+      throw new Error("Forbidden: Admin access required");
+    }
+
+    const now = Date.now();
+    const existingSettings = await ctx.db.query("systemSettings").collect();
+    const existingMap = new Map(
+      existingSettings.map((setting) => [setting.key, setting])
+    );
+
+    const results = [];
+    for (const setting of settings) {
+      const existing = existingMap.get(setting.key);
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          value: setting.value,
+          ...(setting.type && { type: setting.type }),
+          ...(setting.category && { category: setting.category }),
+          updatedAt: now,
+        });
+        const updated = await ctx.db.get(existing._id);
+        if (updated) {
+          results.push(updated);
+        }
+      } else {
+        const id = await ctx.db.insert("systemSettings", {
+          key: setting.key,
+          value: setting.value,
+          type: setting.type ?? "STRING",
+          category: setting.category ?? "general",
+          createdAt: now,
+          updatedAt: now,
+        });
+        const created = await ctx.db.get(id);
+        if (created) {
+          results.push(created);
+        }
+      }
+    }
+
+    results.sort((a, b) => {
+      if (a.category !== b.category) {
+        return a.category.localeCompare(b.category);
+      }
+      return a.key.localeCompare(b.key);
+    });
+
+    return results;
   },
 });
 

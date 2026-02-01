@@ -1,4 +1,6 @@
-import { prisma } from "@/lib/db";
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "../../../convex/_generated/api";
+import type { Doc } from "../../../convex/_generated/dataModel";
 import type {
   SystemSetting,
   SettingType,
@@ -12,30 +14,40 @@ import { DEFAULT_SETTINGS, SETTING_KEYS } from "@/types/settings";
  * Handles system settings CRUD operations
  */
 
-/**
- * Get all settings
- */
-export async function getAll(): Promise<SystemSetting[]> {
-  const settings = await prisma.systemSetting.findMany({
-    orderBy: [{ category: "asc" }, { key: "asc" }],
-  });
+type SettingDoc = Doc<"systemSettings">;
 
-  return settings.map((setting) => ({
-    id: setting.id,
+function toSystemSetting(setting: SettingDoc): SystemSetting {
+  const createdAt = setting.createdAt ?? setting._creationTime;
+  const updatedAt = setting.updatedAt ?? createdAt;
+
+  return {
+    id: setting._id,
     key: setting.key,
     value: setting.value,
     type: setting.type as SettingType,
     category: setting.category,
-    createdAt: setting.createdAt.toISOString(),
-    updatedAt: setting.updatedAt.toISOString(),
-  }));
+    createdAt: new Date(createdAt).toISOString(),
+    updatedAt: new Date(updatedAt).toISOString(),
+  };
+}
+
+/**
+ * Get all settings
+ */
+export async function getAll(
+  client: ConvexHttpClient
+): Promise<SystemSetting[]> {
+  const settings = await client.query(api.settings.getSettings, {});
+  return settings.map(toSystemSetting);
 }
 
 /**
  * Get all settings grouped by category
  */
-export async function getAllGrouped(): Promise<SettingsByCategory> {
-  const settings = await getAll();
+export async function getAllGrouped(
+  client: ConvexHttpClient
+): Promise<SettingsByCategory> {
+  const settings = await getAll(client);
 
   return settings.reduce<SettingsByCategory>((acc, setting) => {
     if (!acc[setting.category]) {
@@ -49,44 +61,24 @@ export async function getAllGrouped(): Promise<SettingsByCategory> {
 /**
  * Get a single setting by key
  */
-export async function getByKey(key: string): Promise<SystemSetting | null> {
-  const setting = await prisma.systemSetting.findUnique({
-    where: { key },
-  });
+export async function getByKey(
+  client: ConvexHttpClient,
+  key: string
+): Promise<SystemSetting | null> {
+  const setting = await client.query(api.settings.getSettingByKey, { key });
 
-  if (!setting) {
-    return null;
-  }
-
-  return {
-    id: setting.id,
-    key: setting.key,
-    value: setting.value,
-    type: setting.type as SettingType,
-    category: setting.category,
-    createdAt: setting.createdAt.toISOString(),
-    updatedAt: setting.updatedAt.toISOString(),
-  };
+  return setting ? toSystemSetting(setting) : null;
 }
 
 /**
  * Get settings by category
  */
-export async function getByCategory(category: string): Promise<SystemSetting[]> {
-  const settings = await prisma.systemSetting.findMany({
-    where: { category },
-    orderBy: { key: "asc" },
-  });
-
-  return settings.map((setting) => ({
-    id: setting.id,
-    key: setting.key,
-    value: setting.value,
-    type: setting.type as SettingType,
-    category: setting.category,
-    createdAt: setting.createdAt.toISOString(),
-    updatedAt: setting.updatedAt.toISOString(),
-  }));
+export async function getByCategory(
+  client: ConvexHttpClient,
+  category: string
+): Promise<SystemSetting[]> {
+  const settings = await client.query(api.settings.getSettings, { category });
+  return settings.map(toSystemSetting);
 }
 
 /**
@@ -94,38 +86,18 @@ export async function getByCategory(category: string): Promise<SystemSetting[]> 
  * Creates the setting if it doesn't exist (upsert)
  */
 export async function update(
+  client: ConvexHttpClient,
   key: string,
   value: string,
   type?: SettingType
 ): Promise<SystemSetting> {
-  // Get existing setting to preserve category if not provided
-  const existing = await prisma.systemSetting.findUnique({
-    where: { key },
+  const setting = await client.mutation(api.settings.upsertSetting, {
+    key,
+    value,
+    type,
   });
 
-  const setting = await prisma.systemSetting.upsert({
-    where: { key },
-    create: {
-      key,
-      value,
-      type: type ?? "STRING",
-      category: existing?.category ?? "general",
-    },
-    update: {
-      value,
-      ...(type && { type }),
-    },
-  });
-
-  return {
-    id: setting.id,
-    key: setting.key,
-    value: setting.value,
-    type: setting.type as SettingType,
-    category: setting.category,
-    createdAt: setting.createdAt.toISOString(),
-    updatedAt: setting.updatedAt.toISOString(),
-  };
+  return toSystemSetting(setting);
 }
 
 /**
@@ -133,66 +105,31 @@ export async function update(
  * Uses a transaction to ensure atomicity
  */
 export async function bulkUpdate(
+  client: ConvexHttpClient,
   settings: BulkSettingUpdate[]
 ): Promise<SystemSetting[]> {
-  // Get existing settings to preserve categories
-  const existingSettings = await prisma.systemSetting.findMany({
-    where: {
-      key: { in: settings.map((s) => s.key) },
-    },
+  const results = await client.mutation(api.settings.bulkUpsertSettings, {
+    settings,
   });
 
-  const existingMap = new Map(
-    existingSettings.map((s) => [s.key, s])
-  );
-
-  // Perform all updates in a transaction
-  const results = await prisma.$transaction(
-    settings.map((setting) => {
-      const existing = existingMap.get(setting.key);
-      return prisma.systemSetting.upsert({
-        where: { key: setting.key },
-        create: {
-          key: setting.key,
-          value: setting.value,
-          type: setting.type ?? "STRING",
-          category: existing?.category ?? "general",
-        },
-        update: {
-          value: setting.value,
-          ...(setting.type && { type: setting.type }),
-        },
-      });
-    })
-  );
-
-  return results.map((setting) => ({
-    id: setting.id,
-    key: setting.key,
-    value: setting.value,
-    type: setting.type as SettingType,
-    category: setting.category,
-    createdAt: setting.createdAt.toISOString(),
-    updatedAt: setting.updatedAt.toISOString(),
-  }));
+  return results.map(toSystemSetting);
 }
 
 /**
  * Initialize default settings if they don't exist
  * Call this during application startup or admin first run
  */
-export async function initializeDefaults(): Promise<void> {
+export async function initializeDefaults(
+  client: ConvexHttpClient
+): Promise<void> {
   const settingKeys = Object.values(SETTING_KEYS);
 
   // Check which settings already exist
-  const existingSettings = await prisma.systemSetting.findMany({
-    where: {
-      key: { in: settingKeys },
-    },
-    select: { key: true },
-  });
-
-  const existingKeys = new Set(existingSettings.map((s) => s.key));
+  const existingSettings = (await client.query(
+    api.settings.getSettings,
+    {}
+  )) as SettingDoc[];
+  const existingKeys = new Set(existingSettings.map((setting) => setting.key));
 
   // Create missing settings
   const settingsToCreate = settingKeys
@@ -208,8 +145,8 @@ export async function initializeDefaults(): Promise<void> {
     });
 
   if (settingsToCreate.length > 0) {
-    await prisma.systemSetting.createMany({
-      data: settingsToCreate,
+    await client.mutation(api.settings.bulkUpsertSettings, {
+      settings: settingsToCreate,
     });
   }
 }
@@ -218,27 +155,32 @@ export async function initializeDefaults(): Promise<void> {
  * Delete a setting by key
  * Use with caution - typically settings should be updated, not deleted
  */
-export async function deleteSetting(key: string): Promise<void> {
-  await prisma.systemSetting.delete({
-    where: { key },
-  });
+export async function deleteSetting(
+  client: ConvexHttpClient,
+  key: string
+): Promise<void> {
+  await client.mutation(api.settings.deleteSetting, { key });
 }
 
 /**
  * Check if a setting exists
  */
-export async function settingExists(key: string): Promise<boolean> {
-  const count = await prisma.systemSetting.count({
-    where: { key },
-  });
-  return count > 0;
+export async function settingExists(
+  client: ConvexHttpClient,
+  key: string
+): Promise<boolean> {
+  const setting = await client.query(api.settings.getSettingByKey, { key });
+  return !!setting;
 }
 
 /**
  * Get a setting value parsed based on its type
  */
-export async function getValue<T = string>(key: string): Promise<T | null> {
-  const setting = await getByKey(key);
+export async function getValue<T = string>(
+  client: ConvexHttpClient,
+  key: string
+): Promise<T | null> {
+  const setting = await getByKey(client, key);
 
   if (!setting) {
     return null;

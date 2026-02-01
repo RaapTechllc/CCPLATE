@@ -51,8 +51,8 @@ export async function GET(request: NextRequest) {
 
   try {
     // Check authentication and admin role
-    const { authenticated, user, isAdmin } = await requireAdmin();
-    if (!authenticated || !user) {
+    const { authenticated, user, isAdmin, convex } = await requireAdmin();
+    if (!authenticated || !user || !convex) {
       return errorResponse("UNAUTHORIZED", "Not authenticated", 401);
     }
     if (!isAdmin) {
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Get paginated users
-    const { users, total } = await getUsers(query);
+    const { users, total } = await getUsers(convex, query);
 
     // Calculate pagination meta
     const totalPages = Math.ceil(total / query.limit);
