@@ -5,10 +5,7 @@ import { Providers } from "@/components/providers";
 import { Toaster } from "@/components/ui/toaster";
 import { ClientHeader } from "@/components/layout/client-header";
 
-// Initialize Sentry on the client side
-if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_SENTRY_DSN) {
-  void import("@/lib/sentry").then(({ initSentry }) => initSentry());
-}
+
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
