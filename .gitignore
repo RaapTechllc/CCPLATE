@@ -66,4 +66,14 @@ memory/workflow-state.json
 memory/tool-log.txt
 memory/guardian.log
 
+# Guardian runtime state - comprehensive exclusions
+# All JSON/JL state files
+memory/*.json
+memory/*.jsonl
+memory/*.txt
+# Snapshots directory
+memory/snapshots/
+# All memory subdirectories and their contents
+memory/**/
+# Keep structure but ignore all runtime state files
 nul
