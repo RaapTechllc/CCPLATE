@@ -1,0 +1,38 @@
+CODEMAP DIFF REPORT
+===================
+Generated: 2026-01-25T00:00:00Z
+
+STATUS: NEW (no previous version)
+
+Files Created:
+- codemaps/architecture.md (NEW)
+- codemaps/backend.md (NEW)
+- codemaps/frontend.md (NEW)
+- codemaps/data.md (NEW)
+
+Change Summary:
+- Previous version: N/A (first generation)
+- Current version: 4 files, ~450 lines total
+- Diff percentage: 100% (new content)
+
+Codebase Analysis:
+- Total .ts files scanned: 100+
+- Total .tsx files scanned: 100+
+- API routes documented: 27
+- Guardian modules documented: 22
+- Components documented: 60+
+- Database models documented: 9
+
+Coverage:
+- Architecture overview: ✓
+- Backend modules: ✓
+- Frontend components: ✓
+- Data models: ✓
+- Guardian system: ✓
+- CLI commands: ✓
+- Memory files: ✓
+
+Next Update Recommended:
+- When significant architectural changes occur
+- When new major modules are added
+- After version bumps

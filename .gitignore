@@ -65,3 +65,5 @@ memory/guardian-state.json
 memory/workflow-state.json
 memory/tool-log.txt
 memory/guardian.log
+
+nul
