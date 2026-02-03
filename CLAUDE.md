@@ -364,10 +364,57 @@ If the same error occurs 3 times:
   - Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
 - Create feature branches for non-trivial changes
 
+## Quality Gates (Mandatory)
+
+### Pre-Commit Checklist
+
+Before marking any task complete, run:
+
+```bash
+/skill audit-compliance --pre-commit
+```
+
+Required checks:
+- [ ] **Security:** No .env files in git, no API keys in source
+- [ ] **Tests:** E2E suite passes (`npm test`)
+- [ ] **Coverage:** 80% threshold met (`npm run test:unit:coverage`)
+- [ ] **Lint:** ESLint passes (`npm run lint`)
+- [ ] **Types:** TypeScript compiles (`npx tsc --noEmit`)
+
+### PR Completeness Criteria
+
+A PR is **NOT** complete unless:
+- [ ] All E2E tests pass (no skipped critical paths)
+- [ ] Unit tests pass with 80%+ coverage
+- [ ] Audit compliance scan passes
+- [ ] Documentation updated (CLAUDE.md, TASK.md if needed)
+- [ ] Warnings section updated (if new issues found)
+- [ ] Code reviewed by audit-compliance skill
+
+### Using the Audit Compliance Skill
+
+```bash
+# Quick check before commit
+/skill audit-compliance --pre-commit
+
+# Full check before push
+/skill audit-compliance --full
+
+# Security only
+/skill audit-compliance --security-only
+
+# Auto-fix where possible
+/skill audit-compliance --fix
+```
+
+**Reference:** `.claude/skills/audit-compliance/SKILL.md`
+
 ## Warnings
 
 > Claude: Add discovered issues here as you encounter them.
 
+- **✅ RESOLVED - Credential Exposure:** `.env.local` was verified NOT in git history, but contained real API keys locally. File properly excluded via .gitignore. User should rotate keys as precaution.
+- **✅ RESOLVED - Memory State Files:** All 20+ runtime state files removed from git tracking. Added `memory/.gitkeep` to preserve directory structure.
 - **Windows PATH Required:** Node.js must be in your system PATH for npm scripts to work. Run `node scripts/setup.js` to check.
 - **E2E Test Timeouts:** Production server can be slow (~6s per page) causing Playwright timeouts. Consider using dev server for tests or increasing timeout values.
 - **Prisma Patches Available:** Non-breaking patches available for Prisma. Safe to update when convenient.
