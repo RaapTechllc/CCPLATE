@@ -1,1 +1,0 @@
-{"timestamp":"2026-01-20T18:06:27.697Z","command":"cd \"/Users/timraap/cursor projects/CCPLATE\" && ls -la .env 2>&1 || echo \"File does not exist\"","reason":"Protected path access: .env","blocked":true}

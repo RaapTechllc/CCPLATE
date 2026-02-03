@@ -1,2 +1,0 @@
-{"worktreeId":"feature-auth","agentName":"implementer","type":"warning","title":"Auth Config Issue","content":"JWT secret must be at least 32 characters","priority":"high","id":"k-1769042513916-adl4","timestamp":"2026-01-22T00:41:53.916Z"}
-{"worktreeId":"feature-db","agentName":"reviewer","type":"pattern","title":"Database Transactions","content":"Always wrap multi-table updates in transactions","priority":"medium","id":"k-1769042521007-u05u","timestamp":"2026-01-22T00:42:01.008Z"}
