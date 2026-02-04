@@ -6,7 +6,7 @@
  * Auto-spawns "Fix Loop" on test failure with screenshot context.
  */
 
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
 import { existsSync, readFileSync, writeFileSync, readdirSync } from "fs";
 import { join } from "path";
 
@@ -55,10 +55,18 @@ export interface TaskTestMapping {
 const VALIDATION_STATE_FILE = "playwright-validation.json";
 const TASK_TEST_MAP_FILE = "task-test-map.json";
 
-function exec(cmd: string, cwd: string): { stdout: string; _exitCode: number } {
+function execFile(file: string, args: string[], cwd: string): { stdout: string; _exitCode: number } {
   try {
-    const stdout = execSync(cmd, { cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
-    return { stdout: stdout.trim(), _exitCode: 0 };
+    const result = spawnSync(file, args, {
+      cwd,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+      shell: false
+    });
+    return {
+      stdout: (result.stdout || "").trim(),
+      _exitCode: result.status ?? (result.error ? 1 : 0)
+    };
   } catch (error: unknown) {
     const execError = error as { stdout?: string; status?: number };
     return { 
@@ -241,21 +249,21 @@ export function runPlaywrightTests(
 ): PlaywrightRunResult {
   const { testPattern, reporter = "list", updateSnapshots = false } = options;
   
-  let cmd = "npx playwright test";
+  const args = ["playwright", "test"];
   
   if (testPattern) {
-    cmd += ` ${testPattern}`;
+    args.push(testPattern);
   }
   
   if (reporter === "json") {
-    cmd += ` --reporter=json`;
+    args.push("--reporter=json");
   }
   
   if (updateSnapshots) {
-    cmd += " --update-snapshots";
+    args.push("--update-snapshots");
   }
 
-  const { stdout } = exec(cmd, rootDir);
+  const { stdout } = execFile("npx", args, rootDir);
   
   // Try to parse JSON report if available
   const jsonReportPath = join(rootDir, "test-results", "report.json");

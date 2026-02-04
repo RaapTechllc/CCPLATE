@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, copyFileSync } from 'fs';
 import { join } from 'path';
 
@@ -29,9 +29,12 @@ function ensureSnapshotsDir(): void {
 
 function getGitInfo(cwd: string = process.cwd()): { commit: string; branch: string } {
   try {
-    const commit = execSync('git rev-parse HEAD', { cwd, encoding: 'utf-8' }).trim();
-    const branch = execSync('git branch --show-current', { cwd, encoding: 'utf-8' }).trim();
-    return { commit, branch };
+    const commitResult = spawnSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf-8', shell: false });
+    const branchResult = spawnSync('git', ['branch', '--show-current'], { cwd, encoding: 'utf-8', shell: false });
+    return {
+      commit: (commitResult.stdout || '').trim() || 'unknown',
+      branch: (branchResult.stdout || '').trim() || 'unknown'
+    };
   } catch {
     return { commit: 'unknown', branch: 'unknown' };
   }
@@ -134,10 +137,14 @@ export function rollbackToStep(step: number): { success: boolean; message: strin
   }
   
   try {
-    execSync(`git checkout ${snapshot.gitCommit} -- .`, { 
+    const result = spawnSync('git', ['checkout', snapshot.gitCommit, '--', '.'], {
       cwd: process.cwd(),
       stdio: 'pipe',
+      shell: false
     });
+    if (result.status !== 0) {
+      throw new Error(result.stderr || `git checkout ${snapshot.gitCommit} failed`);
+    }
   } catch (error) {
     return { 
       success: false, 

@@ -16,3 +16,10 @@
 {"type":"test","status":"completed","message":"Tests passed","timestamp":"2026-01-27T00:05:17.338Z","data":{"passed":true,"testName":"auth.test.ts","testsCount":5,"failures":0}}
 {"type":"hitl","status":"waiting","message":"HITL required: Phase complete review","timestamp":"2026-01-27T00:05:17.339Z","data":{"reason":"Phase complete review","phase":"foundation"}}
 {"type":"hitl","status":"waiting","message":"HITL required: Review","timestamp":"2026-01-27T00:05:17.340Z","data":{"reason":"Review"}}
+{"type":"task","status":"running","taskId":"task-1","message":"Task started: task-1","timestamp":"2026-02-02T23:48:25.782Z"}
+{"type":"workflow","status":"running","message":"Workflow started","timestamp":"2026-02-02T23:48:25.786Z"}
+{"type":"task","status":"completed","taskId":"task-1","phaseId":"foundation","message":"Task completed: task-1","timestamp":"2026-02-02T23:48:25.799Z","data":{}}
+{"type":"build","status":"completed","message":"Build succeeded","timestamp":"2026-02-02T23:48:25.804Z","data":{"output":"Build successful"}}
+{"type":"test","status":"completed","message":"Tests passed","timestamp":"2026-02-02T23:48:25.805Z","data":{"passed":true,"testName":"auth.test.ts","testsCount":5,"failures":0}}
+{"type":"hitl","status":"waiting","message":"HITL required: Phase complete review","timestamp":"2026-02-02T23:48:25.807Z","data":{"reason":"Phase complete review","phase":"foundation"}}
+{"type":"hitl","status":"waiting","message":"HITL required: Review","timestamp":"2026-02-02T23:48:25.809Z","data":{"reason":"Review"}}
