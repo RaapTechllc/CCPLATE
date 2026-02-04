@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import { createLogger } from "./logger";
 import { requestHumanDecision } from "./hitl";
 
@@ -323,7 +323,11 @@ export function applyResolution(
   writeFileSync(fullPath, resolution);
 
   // Stage the resolved file
-  execSync(`git add "${file}"`, { cwd: rootDir });
+  // SECURITY: Use spawnSync with argument array to prevent command injection
+  spawnSync("git", ["add", file], {
+    cwd: rootDir,
+    shell: false
+  });
 
   log.info("Applied resolution", { file });
 }
