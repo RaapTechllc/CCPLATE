@@ -13,3 +13,10 @@
 **Learning:** Using `execSync` with template strings for shell commands is extremely risky, even if the input seems constrained. Standardizing on `spawnSync` with `shell: false` and argument arrays is the only reliable way to prevent command injection when shell features are not strictly required.
 
 **Prevention:** Always prefer `spawnSync` or `execFile` with argument arrays and `shell: false`. Conduct a codebase-wide audit for `execSync` and `exec` helpers that use string interpolation and refactor them to use safer alternatives.
+
+## 2026-02-04 - Command Injection in Multiple Modules
+**Vulnerability:** Several modules (`merge-resolver.ts`, `snapshots.ts`, `validation-loop.ts`) were using `execSync` with string interpolation of variables that could potentially be influenced by external input or malicious filenames. Specifically, `merge-resolver.ts` was vulnerable via malicious filenames in git conflicts, and `snapshots.ts` was vulnerable via manipulated snapshot commit hashes.
+
+**Learning:** Any usage of `execSync` or `exec` with template strings is a potential injection point, even if the source of the data seems internal (like git output or local state files). Git filenames can contain shell metacharacters like `$(...)` or `` `...` ``.
+
+**Prevention:** Always use `spawnSync` with `shell: false` and an argument array instead of string interpolation. Avoid the pattern `execSync(`command "${variable}"`, ...)` as it does not provide sufficient protection against modern shell injection techniques.

@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import { existsSync } from 'fs';
 import { join } from 'path';
 
@@ -36,10 +36,17 @@ export function runPlaywrightTest(testPattern: string): ValidationResult {
   const failedTests: ValidationResult['failedTests'] = [];
   
   try {
-    stdout = execSync(
-      `npx playwright test --grep "${testPattern}" --reporter=json 2>&1`,
-      { cwd: PROJECT_DIR, encoding: 'utf-8', timeout: 120000 }
+    // SECURITY: Use spawnSync with argument array to prevent command injection
+    const result = spawnSync(
+      "npx",
+      ["playwright", "test", "--grep", testPattern, "--reporter=json"],
+      { cwd: PROJECT_DIR, encoding: "utf-8", timeout: 120000 }
     );
+    stdout = (result.stdout as string) || "";
+    stderr = (result.stderr as string) || "";
+    if (result.status !== 0) {
+      throw { stdout, stderr };
+    }
   } catch (error: unknown) {
     const e = error as { stdout?: string; stderr?: string };
     stdout = e.stdout || '';
