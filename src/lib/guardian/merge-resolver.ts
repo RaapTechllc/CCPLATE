@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
 import { createLogger } from "./logger";
 import { requestHumanDecision } from "./hitl";
 
@@ -41,11 +41,15 @@ export interface ResolutionResult {
  */
 export function getConflictedFiles(rootDir: string): string[] {
   try {
-    const output = execSync("git diff --name-only --diff-filter=U", {
+    const result = spawnSync("git", ["diff", "--name-only", "--diff-filter=U"], {
       cwd: rootDir,
       encoding: "utf-8",
+      shell: false,
     });
-    return output
+
+    if (result.status !== 0) return [];
+
+    return (result.stdout as string || "")
       .split("\n")
       .map((f) => f.trim())
       .filter(Boolean);
@@ -323,7 +327,10 @@ export function applyResolution(
   writeFileSync(fullPath, resolution);
 
   // Stage the resolved file
-  execSync(`git add "${file}"`, { cwd: rootDir });
+  spawnSync("git", ["add", file], {
+    cwd: rootDir,
+    shell: false
+  });
 
   log.info("Applied resolution", { file });
 }
