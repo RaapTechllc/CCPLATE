@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, copyFileSync } from 'fs';
 import { join } from 'path';
 
@@ -134,9 +134,10 @@ export function rollbackToStep(step: number): { success: boolean; message: strin
   }
   
   try {
-    execSync(`git checkout ${snapshot.gitCommit} -- .`, { 
+    // SECURITY: Use spawnSync with argument array to prevent command injection
+    spawnSync("git", ["checkout", snapshot.gitCommit, "--", "."], {
       cwd: process.cwd(),
-      stdio: 'pipe',
+      stdio: "pipe",
     });
   } catch (error) {
     return { 
