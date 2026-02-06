@@ -6,7 +6,7 @@
 import { ConvexHttpClient } from "convex/browser";
 import { fileTypeFromBuffer } from "file-type";
 import { api } from "../../../convex/_generated/api";
-import type { Doc } from "../../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../../convex/_generated/dataModel";
 import { getStorageAdapter } from "@/lib/storage";
 import {
   generateUniqueFilename,
@@ -305,7 +305,7 @@ export async function getFile(
 ): Promise<FileResponse | null> {
   try {
     const file = await client.query(api.files.getFileById, {
-      fileId,
+      fileId: fileId as Id<"files">,
       includeDeleted: false,
     });
 
@@ -338,7 +338,7 @@ export async function deleteFile(
 
   try {
     file = await client.query(api.files.getFileById, {
-      fileId,
+      fileId: fileId as Id<"files">,
       includeDeleted: false,
     });
   } catch (error) {
@@ -360,7 +360,7 @@ export async function deleteFile(
 
   try {
     await client.mutation(api.files.deleteFile, {
-      fileId,
+      fileId: fileId as Id<"files">,
       hardDelete,
     });
   } catch (error) {

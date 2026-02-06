@@ -408,7 +408,7 @@ export {
   type ErrorCategory,
   type FixOutcome,
   type FixStrategy,
-  type ErrorPattern,
+  type ErrorPattern as RecoveryErrorPattern,
   type ErrorExample,
   type ErrorMatch,
   type FixAttempt,

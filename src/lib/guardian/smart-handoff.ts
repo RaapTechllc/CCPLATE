@@ -593,7 +593,7 @@ function gatherFromWorkflowState(rootDir: string, analysis: TaskAnalysis): Conte
 }
 
 function formatEventContent(event: WorkflowEvent): string {
-  const parts = [event.type];
+  const parts: string[] = [event.type];
 
   if (event.taskId) parts.push(`task:${event.taskId}`);
   if (event.phaseId) parts.push(`phase:${event.phaseId}`);

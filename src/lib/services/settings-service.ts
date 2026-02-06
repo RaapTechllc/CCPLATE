@@ -97,6 +97,10 @@ export async function update(
     type,
   });
 
+  if (!setting) {
+    throw new Error(`Failed to upsert setting: ${key}`);
+  }
+
   return toSystemSetting(setting);
 }
 

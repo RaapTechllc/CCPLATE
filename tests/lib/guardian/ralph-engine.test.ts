@@ -24,7 +24,8 @@ const samplePRD: DerivedPRD = {
   successCriteria: ["Tests pass"],
   criticalPaths: ["Main flow"],
   nonGoals: ["Not needed"],
-  risks: [],
+  timeline: "1 week",
+  riskAssumptions: [],
   techStack: {
     frontend: "Next.js",
     backend: "Convex",
@@ -35,6 +36,7 @@ const samplePRD: DerivedPRD = {
   },
   keyEntities: ["user"],
   estimatedComplexity: "simple",
+  suggestedPhases: 2,
   convexSchema: [],
 };
 

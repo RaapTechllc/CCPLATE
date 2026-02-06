@@ -551,7 +551,7 @@ export default function GuardianLivePage() {
                       <p className="text-sm text-red-700 dark:text-red-300">
                         {error.message}
                       </p>
-                      {error.data?.error && (
+                      {error.data?.error != null && (
                         <pre className="mt-2 rounded bg-red-100 p-2 text-xs text-red-800 dark:bg-red-900 dark:text-red-200 overflow-x-auto">
                           {String(error.data.error)}
                         </pre>

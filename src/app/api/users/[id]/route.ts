@@ -5,7 +5,7 @@ import { successResponse, errorResponse } from "@/lib/api/response";
 import { ApiError } from "@/lib/api/errors";
 import { idSchema } from "@/lib/validations/common";
 import { api } from "../../../../../convex/_generated/api";
-import type { Doc } from "../../../../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../../../../convex/_generated/dataModel";
 
 // Schema for user updates
 const updateUserSchema = z.object({
@@ -84,7 +84,7 @@ export async function GET(
 
     // Validate and extract user ID
     const { id } = await context.params;
-    const userId = idSchema.parse(id);
+    const userId = idSchema.parse(id) as Id<"users">;
 
     // Check authorization: must be self or admin
     const isSelf = user._id === userId;
@@ -125,7 +125,7 @@ export async function PATCH(
 
     // Validate and extract user ID
     const { id } = await context.params;
-    const userId = idSchema.parse(id);
+    const userId = idSchema.parse(id) as Id<"users">;
 
     // Check authorization
     const isSelf = user._id === userId;
@@ -199,7 +199,7 @@ export async function DELETE(
 
     // Validate and extract user ID
     const { id } = await context.params;
-    const userId = idSchema.parse(id);
+    const userId = idSchema.parse(id) as Id<"users">;
 
     // Check if user exists and is not already deleted
     const targetUser = await convex.query(api.users.getUserById, {

@@ -1,6 +1,6 @@
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../convex/_generated/api";
-import type { Doc } from "../../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../../convex/_generated/dataModel";
 import type { DashboardStats, UserDetails, UserListQuery } from "@/types/admin";
 
 /**
@@ -78,7 +78,7 @@ export async function getUser(
   id: string
 ): Promise<UserDetails | null> {
   const result = await client.query(api.admin.getUserWithCounts, {
-    userId: id,
+    userId: id as Id<"users">,
   });
 
   if (!result) {
@@ -102,7 +102,7 @@ export async function updateUser(
   }
 ): Promise<UserDetails> {
   await client.mutation(api.users.updateUser, {
-    userId: id,
+    userId: id as Id<"users">,
     name: data.name,
     email: data.email,
     role: data.role,
@@ -110,7 +110,7 @@ export async function updateUser(
   });
 
   const result = await client.query(api.admin.getUserWithCounts, {
-    userId: id,
+    userId: id as Id<"users">,
   });
 
   if (!result) {
@@ -127,7 +127,7 @@ export async function deleteUser(
   client: ConvexHttpClient,
   id: string
 ): Promise<void> {
-  await client.mutation(api.users.deleteUser, { userId: id });
+  await client.mutation(api.users.deleteUser, { userId: id as Id<"users"> });
 }
 
 /**
@@ -137,10 +137,10 @@ export async function restoreUser(
   client: ConvexHttpClient,
   id: string
 ): Promise<UserDetails> {
-  await client.mutation(api.users.restoreUser, { userId: id });
+  await client.mutation(api.users.restoreUser, { userId: id as Id<"users"> });
 
   const result = await client.query(api.admin.getUserWithCounts, {
-    userId: id,
+    userId: id as Id<"users">,
   });
 
   if (!result) {
@@ -158,7 +158,7 @@ export async function userExists(
   id: string
 ): Promise<boolean> {
   const user = await client.query(api.users.getUserById, {
-    userId: id,
+    userId: id as Id<"users">,
     includeDeleted: false,
   });
   return !!user;
@@ -174,6 +174,6 @@ export async function emailInUse(
 ): Promise<boolean> {
   return client.query(api.users.emailInUse, {
     email,
-    excludeUserId,
+    excludeUserId: excludeUserId as Id<"users"> | undefined,
   });
 }
