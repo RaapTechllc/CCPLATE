@@ -63,7 +63,7 @@ export default async function globalSetup(config: FullConfig) {
   // Wait for server to be ready
   const serverReady = await waitForServer();
   if (!serverReady) {
-    throw new Error("Server did not start within expected time. Run 'npm start' first.");
+    throw new Error("Server did not start within expected time. Run 'npm run dev:next' first.");
   }
 
   // Warm up common pages

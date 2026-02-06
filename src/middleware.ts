@@ -34,8 +34,13 @@ const isPublicRoute = createRouteMatcher([
 export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
   const { pathname } = request.nextUrl;
 
-  // Check authentication status
-  const isAuthenticated = await convexAuth.isAuthenticated();
+  // Check authentication status (default to unauthenticated if Convex is unavailable)
+  let isAuthenticated = false;
+  try {
+    isAuthenticated = await convexAuth.isAuthenticated();
+  } catch {
+    // Convex backend unavailable - treat as unauthenticated
+  }
 
   // Handle admin routes
   if (isAdminRoute(request)) {

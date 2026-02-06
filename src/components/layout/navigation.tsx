@@ -62,7 +62,8 @@ export function Navigation({
   orientation = "horizontal",
   onLinkClick,
 }: NavigationProps) {
-  const { isAuthenticated } = useConvexAuth();
+  const convexAuth = useConvexAuth();
+  const isAuthenticated = convexAuth?.isAuthenticated ?? false;
   const [buildersOpen, setBuildersOpen] = useState(false);
   const pathname = usePathname();
   const isBuilderActive = builderLinks.some(

@@ -78,9 +78,11 @@ export default defineConfig({
     // },
   ],
 
-  // Run production build for faster tests (dev server compiles on-demand, too slow)
+  // Start server for tests: dev server locally (reuses existing), standalone build in CI
   webServer: {
-    command: process.env.CI ? "npm run build && npm start" : "npm start",
+    command: process.env.CI
+      ? "npm run build && node .next/standalone/server.js"
+      : "npm run dev:next",
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
