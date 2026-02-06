@@ -13,3 +13,10 @@
 **Learning:** Using `execSync` with template strings for shell commands is extremely risky, even if the input seems constrained. Standardizing on `spawnSync` with `shell: false` and argument arrays is the only reliable way to prevent command injection when shell features are not strictly required.
 
 **Prevention:** Always prefer `spawnSync` or `execFile` with argument arrays and `shell: false`. Conduct a codebase-wide audit for `execSync` and `exec` helpers that use string interpolation and refactor them to use safer alternatives.
+
+## 2026-02-10 - Command Injection in Merge Resolver
+**Vulnerability:** The merge conflict resolver (`src/lib/guardian/merge-resolver.ts`) was using `execSync` with template strings to execute `git add` on files with conflicts. This allowed for arbitrary command execution if a repository contained files with malicious names (e.g., `"; touch pwned; "`).
+
+**Learning:** Git filenames can contain arbitrary characters, including shell metacharacters. When processing filenames from `git diff` or other git commands, they must never be directly interpolated into shell command strings.
+
+**Prevention:** Use `spawnSync` with argument arrays and `shell: false` for all git operations involving filenames or other untrusted strings. Standardize on the shared security module's pattern of avoiding shell-based execution for external input.
