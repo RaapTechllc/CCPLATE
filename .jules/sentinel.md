@@ -13,3 +13,10 @@
 **Learning:** Using `execSync` with template strings for shell commands is extremely risky, even if the input seems constrained. Standardizing on `spawnSync` with `shell: false` and argument arrays is the only reliable way to prevent command injection when shell features are not strictly required.
 
 **Prevention:** Always prefer `spawnSync` or `execFile` with argument arrays and `shell: false`. Conduct a codebase-wide audit for `execSync` and `exec` helpers that use string interpolation and refactor them to use safer alternatives.
+
+## 2026-02-10 - Command Injection in CCPLATE CLI
+**Vulnerability:** The `ccplate` CLI used a helper `exec` function that wrapped `execSync` with string interpolation. While some inputs were validated, others (like worktree paths or branch names) could potentially be manipulated if configuration files or internal state were compromised, leading to command injection.
+
+**Learning:** Even with input validation, the use of `execSync` with shell-interpreted strings remains a risk. Hardening the execution layer by forcing the use of argument arrays and disabling shell interpretation (`shell: false`) provides defense-in-depth.
+
+**Prevention:** Refactor internal execution helpers to use `spawnSync` with argument arrays. Ensure that the helper correctly handles non-zero exit codes and capture stderr for better debugging, while never passing raw strings to the shell.
