@@ -34,12 +34,26 @@ const isPublicRoute = createRouteMatcher([
 export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
   const { pathname } = request.nextUrl;
 
+  // E2E test auth bypass: requires ALL THREE conditions:
+  // 1. NOT production (hard safety net)
+  // 2. E2E_TEST_AUTH_BYPASS env var set on the server
+  // 3. x-e2e-test-auth header on the request (set per-page in tests)
+  const isE2ETestBypass =
+    process.env.NODE_ENV !== "production" &&
+    process.env.E2E_TEST_AUTH_BYPASS === "true" &&
+    request.headers.get("x-e2e-test-auth") === "bypass";
+
   // Check authentication status (default to unauthenticated if Convex is unavailable)
   let isAuthenticated = false;
-  try {
-    isAuthenticated = await convexAuth.isAuthenticated();
-  } catch {
-    // Convex backend unavailable - treat as unauthenticated
+  if (isE2ETestBypass) {
+    isAuthenticated = true;
+  } else {
+    try {
+      isAuthenticated = await convexAuth.isAuthenticated();
+    } catch (error) {
+      // Convex backend unavailable - treat as unauthenticated
+      console.error("[middleware] Auth check failed:", error instanceof Error ? error.message : error);
+    }
   }
 
   // Handle admin routes

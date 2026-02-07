@@ -1,11 +1,12 @@
 /**
  * Authentication fixtures for Playwright E2E tests
  *
- * Note: With Convex Auth (OAuth only), we cannot programmatically log in users
- * without mocking OAuth providers. These fixtures are kept for future use
- * when OAuth mocking is implemented.
+ * Auth bypass requires BOTH:
+ *   1. E2E_TEST_AUTH_BYPASS=true env var on the dev server (playwright.config.ts webServer.env)
+ *   2. x-e2e-test-auth: bypass header on each request (set via enableAuthBypass)
  *
- * For now, tests focus on unauthenticated behavior (redirects, etc.)
+ * This two-factor approach lets auth/protected-route tests run normally
+ * while builder tests opt-in to bypass via the header.
  */
 
 import { test as base, expect, Page } from "@playwright/test";
@@ -34,6 +35,15 @@ export async function isAuthenticated(page: Page): Promise<boolean> {
 }
 
 /**
+ * Enable auth bypass for this page's requests.
+ * Sets the x-e2e-test-auth header so the middleware treats all
+ * requests from this page as authenticated. Call before navigating.
+ */
+export async function enableAuthBypass(page: Page): Promise<void> {
+  await page.setExtraHTTPHeaders({ "x-e2e-test-auth": "bypass" });
+}
+
+/**
  * Navigate to login page
  */
 export async function goToLogin(page: Page): Promise<void> {
@@ -44,26 +54,20 @@ export async function goToLogin(page: Page): Promise<void> {
 /**
  * Extended test with authentication helpers
  *
- * Note: authenticatedPage and adminPage fixtures require OAuth mocking
- * to be implemented. For now, they are placeholders.
+ * Auth bypass is handled at the middleware level via E2E_TEST_AUTH_BYPASS.
+ * These fixtures provide authenticated page contexts for tests.
  */
 export const test = base.extend<{
   authenticatedPage: Page;
   adminPage: Page;
 }>({
-  // Placeholder - requires OAuth mocking
   authenticatedPage: async ({ page }, applyFixture) => {
-    // Without OAuth mocking, we can't authenticate
-    // Tests using this fixture should check isAuthenticated() and skip if false
-    console.warn("authenticatedPage fixture: OAuth mocking not implemented, using unauthenticated page");
     await applyFixture(page);
   },
 
-  // Placeholder - requires OAuth mocking
   adminPage: async ({ browser }, applyFixture) => {
     const context = await browser.newContext();
     const page = await context.newPage();
-    console.warn("adminPage fixture: OAuth mocking not implemented, using unauthenticated page");
     await applyFixture(page);
     await context.close();
   },

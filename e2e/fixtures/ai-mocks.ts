@@ -105,11 +105,14 @@ export const MOCK_SCHEMA_RESPONSE = {
 
 /**
  * API Builder - Mock generated API endpoint files
+ * Note: files must match GeneratedFiles type (object with routeContent/dynamicRouteContent)
+ * Note: spec must match APISpec type (name, basePath, model, endpoints)
  */
 export const MOCK_API_RESPONSE = {
   spec: {
+    name: "Posts API",
     basePath: "/api/posts",
-    modelName: "Post",
+    model: "Post",
     endpoints: [
       { method: "GET", path: "/api/posts", auth: "required", pagination: true },
       { method: "POST", path: "/api/posts", auth: "required", pagination: false },
@@ -118,88 +121,12 @@ export const MOCK_API_RESPONSE = {
       { method: "DELETE", path: "/api/posts/[id]", auth: "admin", pagination: false },
     ],
   },
-  files: [
-    {
-      path: "src/app/api/posts/route.ts",
-      content: `import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth";
-import { prisma } from "@/lib/db";
-
-export async function GET(request: NextRequest) {
-  const { authenticated } = await requireAuth();
-  if (!authenticated) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const posts = await prisma.post.findMany();
-  return NextResponse.json({ data: posts });
-}
-
-export async function POST(request: NextRequest) {
-  const { authenticated, user } = await requireAuth();
-  if (!authenticated || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const body = await request.json();
-  const post = await prisma.post.create({ data: body });
-  return NextResponse.json({ data: post }, { status: 201 });
-}
-`,
-    },
-    {
-      path: "src/app/api/posts/[id]/route.ts",
-      content: `import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, requireAdmin } from "@/lib/auth";
-import { prisma } from "@/lib/db";
-
-interface RouteParams {
-  params: Promise<{ id: string }>;
-}
-
-export async function GET(request: NextRequest, { params }: RouteParams) {
-  const { authenticated } = await requireAuth();
-  if (!authenticated) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { id } = await params;
-  const post = await prisma.post.findUnique({ where: { id } });
-
-  if (!post) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-
-  return NextResponse.json({ data: post });
-}
-
-export async function PUT(request: NextRequest, { params }: RouteParams) {
-  const { authenticated } = await requireAuth();
-  if (!authenticated) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { id } = await params;
-  const body = await request.json();
-  const post = await prisma.post.update({ where: { id }, data: body });
-
-  return NextResponse.json({ data: post });
-}
-
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
-  const { authenticated, isAdmin } = await requireAdmin();
-  if (!authenticated || !isAdmin) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const { id } = await params;
-  await prisma.post.delete({ where: { id } });
-
-  return NextResponse.json({ success: true }, { status: 200 });
-}
-`,
-    },
-  ],
+  files: {
+    routePath: "src/app/api/posts/route.ts",
+    routeContent: `import { NextRequest, NextResponse } from "next/server";\nimport { requireAuth } from "@/lib/auth";\nimport { prisma } from "@/lib/db";\n\nexport async function GET(request: NextRequest) {\n  const { authenticated } = await requireAuth();\n  if (!authenticated) {\n    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });\n  }\n  const posts = await prisma.post.findMany();\n  return NextResponse.json({ data: posts });\n}\n\nexport async function POST(request: NextRequest) {\n  const { authenticated, user } = await requireAuth();\n  if (!authenticated || !user) {\n    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });\n  }\n  const body = await request.json();\n  const post = await prisma.post.create({ data: body });\n  return NextResponse.json({ data: post }, { status: 201 });\n}`,
+    dynamicRoutePath: "src/app/api/posts/[id]/route.ts",
+    dynamicRouteContent: `import { NextRequest, NextResponse } from "next/server";\nimport { requireAuth, requireAdmin } from "@/lib/auth";\nimport { prisma } from "@/lib/db";\n\nexport async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {\n  const { authenticated } = await requireAuth();\n  if (!authenticated) {\n    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });\n  }\n  const { id } = await params;\n  const post = await prisma.post.findUnique({ where: { id } });\n  return NextResponse.json({ data: post });\n}\n\nexport async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {\n  const { authenticated, isAdmin } = await requireAdmin();\n  if (!authenticated || !isAdmin) {\n    return NextResponse.json({ error: "Forbidden" }, { status: 403 });\n  }\n  const { id } = await params;\n  await prisma.post.delete({ where: { id } });\n  return NextResponse.json({ success: true });\n}`,
+  },
   existingFiles: [],
 };
 
@@ -283,10 +210,14 @@ export async function setupAIMocks(page: Page): Promise<void> {
     await mockJsonResponse(route, MOCK_API_RESPONSE);
   });
 
-  // Agent APIs
+  await page.route("**/api/api-builder/models", async (route) => {
+    await mockJsonResponse(route, { models: ["User", "Post", "Comment", "Category"] });
+  });
+
+  // Agent APIs - component expects plain array from GET /api/agents
   await page.route("**/api/agents", async (route) => {
     if (route.request().method() === "GET") {
-      await mockJsonResponse(route, { agents: [MOCK_AGENT] });
+      await mockJsonResponse(route, [MOCK_AGENT]);
     } else if (route.request().method() === "POST") {
       await mockJsonResponse(route, MOCK_AGENT, 201);
     } else {
