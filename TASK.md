@@ -37,11 +37,15 @@
 
 ### 🎯 Deferred Items
 
-- [ ] **Integrate Oracle for AI Code Review** (Phase 9.6)
-  - [ ] Call Oracle on each file change
-  - [ ] Check against react-best-practices skill (57 rules)
-  - [ ] Generate improvement suggestions
-  - [ ] Track review scores over time
+- [x] **Integrate Oracle for AI Code Review** (Phase 9.6) ✅ (2026-02-06)
+  - [x] Created Oracle agent (`.claude/agents/oracle.md`) with Opus model
+  - [x] Architectural reviewer for parallel chunk validation
+  - [x] Checks against project skills (coding-standards, security-review, react-best-practices)
+  - [x] Generates improvement suggestions with file:line references
+  - [x] Supports oracle_auto / oracle_human / human_only merge strategies
+  - [x] Results logged to `memory/oracle-reviews.jsonl`
+  - [x] Upgraded team-coordinator to Opus model
+  - [x] Added models config to ccplate.config.json
 
 - [ ] **Multi-language LSP support** (implement when Go/Rust workflows needed)
   - [ ] Add gopls for Go
@@ -117,7 +121,7 @@
 | Guardian Modules | 31 | 2026-01-26 |
 | CLI Commands | 37+ families | 2026-01-26 |
 | Workflow Tiers | 5 | 2026-01-26 |
-| Agents Defined | 3 | 2026-01-23 |
+| Agents Defined | 4 (+Oracle) | 2026-02-06 |
 | AI Builders | 6 | 2026-01-23 |
 | Web UI Pages | 5 guardian pages | 2026-01-26 |
 | Unit Tests | **258 passing** | 2026-01-26 |
@@ -151,5 +155,5 @@
 
 ---
 
-**Last Updated:** 2026-01-26
-**Next Review:** Phase 9.6 (Oracle AI Code Review) or production testing
+**Last Updated:** 2026-02-06
+**Next Review:** Production testing or Fleet Commander

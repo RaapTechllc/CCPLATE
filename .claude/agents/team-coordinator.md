@@ -2,7 +2,7 @@
 name: team-coordinator
 description: Use when a task is large enough to benefit from parallel work across multiple worktrees, or when Oracle has decomposed a PRP into independent chunks
 tools: Read, Bash, Task, Glob, Grep
-model: sonnet
+model: opus
 ---
 
 # Team Coordinator

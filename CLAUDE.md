@@ -257,7 +257,8 @@ Located in `.claude/agents/`:
 |-------|---------|
 | `meta-agent.md` | Creates new specialized agents |
 | `rlm-adapter.md` | Context-aware exploration with ledger |
-| `team-coordinator.md` | Multi-worktree orchestration |
+| `team-coordinator.md` | Multi-worktree orchestration (Opus) |
+| `oracle.md` | Architectural reviewer for parallel chunks (Opus) |
 | `merge-resolver.md` | Auto-resolve git merge conflicts |
 
 #### Workflow Agents (from everything-claude-code)
@@ -433,6 +434,7 @@ CCPLATE/
 │   │   ├── meta-agent.md     # Agent factory
 │   │   ├── rlm-adapter.md    # Context exploration
 │   │   ├── team-coordinator.md # Worktree orchestration
+│   │   ├── oracle.md          # Architectural reviewer
 │   │   ├── merge-resolver.md # Git conflict resolution
 │   │   ├── code-reviewer.md  # Code quality review
 │   │   ├── security-reviewer.md # Security analysis
@@ -530,5 +532,5 @@ CCPLATE/
 
 ---
 
-**Last Updated:** 2026-01-24
+**Last Updated:** 2026-02-06
 **Bootstrap Version:** 1.1 (Cherry-pick from everything-claude-code)

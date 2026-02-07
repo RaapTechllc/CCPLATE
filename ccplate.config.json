@@ -59,5 +59,17 @@
     "maxExcerptLines": 50,
     "recursionThreshold": 10,
     "maxRecursionDepth": 3
+  },
+  "models": {
+    "oracle": "opus",
+    "teamCoordinator": "opus",
+    "codeReviewer": "opus",
+    "securityReviewer": "opus",
+    "tddGuide": "opus",
+    "buildErrorResolver": "opus",
+    "refactorCleaner": "opus",
+    "metaAgent": "sonnet",
+    "rlmAdapter": "sonnet",
+    "mergeResolver": "haiku"
   }
 }
