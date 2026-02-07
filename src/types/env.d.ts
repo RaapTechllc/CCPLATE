@@ -15,17 +15,17 @@ declare namespace NodeJS {
 
     // Convex Auth - Google OAuth
     /** Google OAuth client ID (Convex Auth) */
-    AUTH_GOOGLE_ID?: string;
+    GOOGLE_CLIENT_ID?: string;
 
     /** Google OAuth client secret (Convex Auth) */
-    AUTH_GOOGLE_SECRET?: string;
+    GOOGLE_CLIENT_SECRET?: string;
 
     // Convex Auth - GitHub OAuth
     /** GitHub OAuth client ID (Convex Auth) */
-    AUTH_GITHUB_ID?: string;
+    GITHUB_CLIENT_ID?: string;
 
     /** GitHub OAuth client secret (Convex Auth) */
-    AUTH_GITHUB_SECRET?: string;
+    GITHUB_CLIENT_SECRET?: string;
 
     // Convex
     /** Convex deployment URL */

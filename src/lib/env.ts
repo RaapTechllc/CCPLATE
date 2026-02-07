@@ -12,12 +12,12 @@ const envSchema = z.object({
     .url({ message: 'NEXT_PUBLIC_CONVEX_URL must be a valid URL' }),
 
   // OAuth - Google (set in Convex dashboard)
-  AUTH_GOOGLE_ID: z.string().optional(),
-  AUTH_GOOGLE_SECRET: z.string().optional(),
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
 
   // OAuth - GitHub (set in Convex dashboard)
-  AUTH_GITHUB_ID: z.string().optional(),
-  AUTH_GITHUB_SECRET: z.string().optional(),
+  GITHUB_CLIENT_ID: z.string().optional(),
+  GITHUB_CLIENT_SECRET: z.string().optional(),
 
   // Vercel Deployment (optional)
   VERCEL_API_TOKEN: z.string().optional(),
@@ -38,10 +38,10 @@ function validateEnv(): Env {
   const result = envSchema.safeParse({
     CONVEX_DEPLOYMENT: process.env.CONVEX_DEPLOYMENT,
     NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL,
-    AUTH_GOOGLE_ID: process.env.AUTH_GOOGLE_ID,
-    AUTH_GOOGLE_SECRET: process.env.AUTH_GOOGLE_SECRET,
-    AUTH_GITHUB_ID: process.env.AUTH_GITHUB_ID,
-    AUTH_GITHUB_SECRET: process.env.AUTH_GITHUB_SECRET,
+    GOOGLE_CLIENT_ID: process.env.AUTH_GOOGLE_ID,
+    GOOGLE_CLIENT_SECRET: process.env.AUTH_GOOGLE_SECRET,
+    GITHUB_CLIENT_ID: process.env.AUTH_GITHUB_ID,
+    GITHUB_CLIENT_SECRET: process.env.AUTH_GITHUB_SECRET,
     VERCEL_API_TOKEN: process.env.VERCEL_API_TOKEN,
     VERCEL_TEAM_ID: process.env.VERCEL_TEAM_ID,
   });
@@ -67,10 +67,10 @@ function validateEnv(): Env {
       return {
         CONVEX_DEPLOYMENT: process.env.CONVEX_DEPLOYMENT,
         NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL ?? '',
-        AUTH_GOOGLE_ID: process.env.AUTH_GOOGLE_ID,
-        AUTH_GOOGLE_SECRET: process.env.AUTH_GOOGLE_SECRET,
-        AUTH_GITHUB_ID: process.env.AUTH_GITHUB_ID,
-        AUTH_GITHUB_SECRET: process.env.AUTH_GITHUB_SECRET,
+        GOOGLE_CLIENT_ID: process.env.AUTH_GOOGLE_ID,
+        GOOGLE_CLIENT_SECRET: process.env.AUTH_GOOGLE_SECRET,
+        GITHUB_CLIENT_ID: process.env.AUTH_GITHUB_ID,
+        GITHUB_CLIENT_SECRET: process.env.AUTH_GITHUB_SECRET,
         VERCEL_API_TOKEN: process.env.VERCEL_API_TOKEN,
         VERCEL_TEAM_ID: process.env.VERCEL_TEAM_ID,
       } as Env;
