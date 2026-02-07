@@ -32,9 +32,6 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  // Use standalone output for deployment
-  output: 'standalone',
-  
   // Disable React Strict Mode during build
   reactStrictMode: false,
   

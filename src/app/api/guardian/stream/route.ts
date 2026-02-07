@@ -6,12 +6,13 @@
  */
 
 import { NextRequest } from "next/server";
-import { 
-  progressEmitter, 
-  loadProgressEvents, 
-  type ProgressUpdate, 
-  type ProgressType 
+import {
+  progressEmitter,
+  loadProgressEvents,
+  type ProgressUpdate,
+  type ProgressType
 } from "@/lib/guardian/progress-emitter";
+import { requireAuth } from "@/lib/auth";
 
 // Force dynamic rendering for SSE
 export const dynamic = "force-dynamic";
@@ -34,6 +35,11 @@ const HEARTBEAT_INTERVAL = 30000;
  * - replay: "true" to replay buffered events on connect
  */
 export async function GET(request: NextRequest): Promise<Response> {
+  const { authenticated } = await requireAuth();
+  if (!authenticated) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const searchParams = request.nextUrl.searchParams;
   
   // Parse filters
@@ -193,6 +199,11 @@ function formatSSE(update: ProgressUpdate, eventType: string): string {
  * Manually emit a progress event (for testing or external integrations).
  */
 export async function POST(request: NextRequest): Promise<Response> {
+  const { authenticated } = await requireAuth();
+  if (!authenticated) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
     
