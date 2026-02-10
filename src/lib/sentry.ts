@@ -4,32 +4,33 @@
  */
 
 import * as Sentry from '@sentry/nextjs';
+import { logger } from './logger';
 
 /**
  * Initialize Sentry with environment-specific configuration
  */
 export function initSentry() {
   if (!process.env.NEXT_PUBLIC_SENTRY_DSN) {
-    console.log('[Sentry] DSN not configured, skipping initialization');
+    logger.debug('Sentry DSN not configured, skipping initialization');
     return;
   }
 
   Sentry.init({
     dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
     environment: process.env.NODE_ENV || 'development',
-    
+
     // Performance monitoring
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-    
+
     // Error sampling
     sampleRate: 1.0,
-    
+
     // Debug in development
     debug: process.env.NODE_ENV === 'development',
-    
+
     // Enable release tracking
     release: process.env.VERCEL_GIT_COMMIT_SHA || process.env.npm_package_version,
-    
+
     // Before send hook to filter sensitive data
     beforeSend(event) {
       // Sanitize sensitive headers
@@ -39,7 +40,7 @@ export function initSentry() {
         delete headers['cookie'];
         delete headers['x-api-key'];
       }
-      
+
       // Sanitize URL query params that might contain tokens
       if (event.request?.url) {
         try {
@@ -52,12 +53,10 @@ export function initSentry() {
           // Invalid URL, leave as-is
         }
       }
-      
+
       return event;
     },
   });
-
-  console.log('[Sentry] Initialized successfully');
 }
 
 /**
@@ -110,7 +109,7 @@ export function addBreadcrumb(
  * Note: In Sentry v8+, use startSpan instead of startTransaction
  */
 export function startSpan(name: string, op: string) {
-  return Sentry.startSpan({ name, op }, () => {});
+  return Sentry.startSpan({ name, op }, () => { });
 }
 
 /**

@@ -147,7 +147,7 @@ src/
 
 ## Tech Stack
 
-- **Framework**: Next.js 14 (App Router)
+- **Framework**: Next.js 16 (App Router)
 - **Language**: TypeScript
 - **Database**: PostgreSQL + Prisma
 - **Auth**: NextAuth.js

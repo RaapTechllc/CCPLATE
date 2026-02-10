@@ -12,22 +12,24 @@
 
 | Layer | Technology | Rationale |
 |-------|------------|-----------|
-| Frontend | Next.js 14 + React | Server components, App Router, strong ecosystem |
-| Backend | Next.js API Routes | Unified codebase, serverless-ready |
-| Database | PostgreSQL | Robust relational database, great for structured data |
-| ORM | Prisma | Type-safe queries, migrations, excellent DX |
+| Frontend | Next.js 16 + React | Server components, App Router, Turbopack |
+| Backend | Convex | Real-time, type-safe, built-in auth |
+| Database | Convex (primary) | Real-time sync, automatic caching |
+| ORM | Prisma (legacy) | Retained for file storage & NextAuth models |
 | Styling | Tailwind CSS | Utility-first, fast development |
-| Auth | NextAuth.js v4 | Credentials + OAuth (GitHub, Google), session handling |
-| Hosting | Vercel | Optimized for Next.js, easy deployment |
+| Auth | Convex Auth | OAuth (GitHub, Google) + Email/Password |
+| AI | OpenAI + Anthropic | Dual provider with effort levels & thinking |
+| Hosting | Vercel | Optimized for Next.js, serverless |
+| Monitoring | Sentry | Error tracking, performance monitoring |
 
 ## Design Decisions
 
 | Date | Decision | Rationale | Alternatives Considered |
 |------|----------|-----------|------------------------|
-| 2026-01-20 | Next.js 14 with App Router | Modern React patterns, server components | Pages Router, Remix, plain React |
-| 2026-01-20 | PostgreSQL for database | Robust, scalable, well-supported | MongoDB, SQLite |
-| 2026-01-20 | Prisma as ORM | Type safety, great migrations, DX | Drizzle, TypeORM, raw SQL |
-| 2026-01-20 | Tailwind CSS | Fast styling, consistent design | CSS Modules, styled-components |
+| 2026-01-20 | Next.js with App Router | Modern React patterns, server components | Pages Router, Remix |
+| 2026-01-20 | Convex for data layer | Real-time sync, type-safe, built-in auth | Prisma + PostgreSQL |
+| 2026-02-10 | Dual AI provider (OpenAI + Anthropic) | Flexibility, model-specific strengths | Single provider |
+| 2026-02-10 | Effort levels in AI config | Opus 4.6 adaptive thinking, cost control | Fixed temperature |
 
 ## Constraints
 
@@ -41,15 +43,20 @@
 
 ### Critical (App won't work without)
 
-- **Prisma** - Type-safe ORM, database migrations
-- **NextAuth.js v4** - Authentication (credentials + OAuth)
-- **PostgreSQL** - Primary database
+- **Convex** - Real-time backend, authentication, primary data layer
+- **Next.js 16** - Frontend framework, server components, API routes
 
 ### Important (Core features need)
 
 - **OpenAI SDK** - AI-powered builders (hook, component, schema, etc.)
-- **Anthropic SDK** - Alternative AI provider
+- **Anthropic SDK** - Alternative AI provider with extended thinking
 - **Zod** - Input validation and schema definition
+- **Sentry** - Error monitoring and performance tracking
+
+### Legacy (Migration path to Convex-only)
+
+- **Prisma** - File storage models, NextAuth models (being migrated to Convex)
+- **PostgreSQL** - Retained for Prisma-backed features only
 
 ### Nice-to-have (Enhanced functionality)
 
@@ -61,13 +68,25 @@
 > How data moves through the system.
 
 ```
-[To be documented after architecture is established]
-
-Example:
-User → Frontend → API → Database
-                    ↓
-              External Services
+User → Next.js Frontend → Convex (real-time queries/mutations)
+                        → API Routes → AI Providers (OpenAI/Anthropic)
+                        → Prisma → PostgreSQL (file storage only)
 ```
+
+### Data Layer Audit (2026-02-10)
+
+| Feature | Data Layer | Notes |
+|---------|-----------|-------|
+| Users | **Convex** | Auth, profiles, roles |
+| AI Builders | **Convex** | Feature builder metrics, generations |
+| User API routes | **Convex** | `/api/users/[id]`, `/api/users/me` |
+| File Storage | **Prisma** | Upload tracking, S3/R2 metadata |
+| System Settings | **Prisma** | Admin configuration |
+| Auth Sessions | **Convex Auth** | OAuth + Email/Password |
+
+**Migration Path:** Convex is the primary data layer. Prisma is retained
+only for file storage and system settings. Long-term, these should migrate
+to Convex for a unified data layer.
 
 ## Security Considerations
 
@@ -141,10 +160,13 @@ Developer describes feature in natural language
 │  Pages │ Components │ Hooks │ API Routes                │
 ├─────────────────────────────────────────────────────────┤
 │                    Service Layer                         │
-│  Auth │ Files │ Admin │ AI Agents                       │
+│  Auth (Convex) │ AI (OpenAI/Anthropic) │ Files │ Admin  │
 ├─────────────────────────────────────────────────────────┤
 │                    Data Layer                            │
-│  Prisma │ PostgreSQL │ File Storage                     │
+│  Convex (primary) │ Prisma/PostgreSQL (legacy/files)    │
+├─────────────────────────────────────────────────────────┤
+│                    Infrastructure                        │
+│  Vercel │ Sentry │ Structured Logging │ Rate Limiting   │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -160,5 +182,5 @@ Developer describes feature in natural language
 
 ---
 
-**Last Updated:** 2026-01-21
+**Last Updated:** 2026-02-10
 **Review Cadence:** After each major feature

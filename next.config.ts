@@ -7,7 +7,7 @@ const securityHeaders = [
   },
   {
     key: 'Content-Security-Policy',
-    value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; connect-src 'self' https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+    value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; connect-src 'self' https: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
   },
   {
     key: 'Strict-Transport-Security',
@@ -34,14 +34,14 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   // Disable React Strict Mode during build
   reactStrictMode: false,
-  
+
   // Disable static generation entirely - all pages are dynamic
   // This is required for Convex auth which needs client-side rendering
   experimental: {
     // Disable partial prerendering
     ppr: false,
   },
-  
+
   async headers() {
     return [
       {

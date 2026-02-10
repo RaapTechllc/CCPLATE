@@ -32,12 +32,18 @@ export async function complete(request: AIRequest): Promise<AIResponse> {
   const client = getAIClient();
   const config = getAIConfig();
 
-  const requestWithModel: AIRequest = {
+  const requestWithDefaults: AIRequest = {
     ...request,
     model: request.model || config.defaultModel,
+    effortLevel: request.effortLevel || config.defaultEffortLevel,
+    thinking: request.thinking ?? (
+      config.enableThinking && config.provider === "anthropic"
+        ? { enabled: true }
+        : undefined
+    ),
   };
 
-  return withRetry(() => client.complete(requestWithModel));
+  return withRetry(() => client.complete(requestWithDefaults));
 }
 
 export async function completeJson<T extends z.ZodSchema>(
