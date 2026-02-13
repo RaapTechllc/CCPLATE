@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { getAIConfig } from "./config";
-import { OpenAIProvider, AnthropicProvider } from "./providers";
+import { OpenAIProvider, AnthropicProvider, GoogleProvider } from "./providers";
 import type { AIProvider, AIRequest, AIResponse } from "./providers/types";
 import { AIError } from "./errors";
 import { withRetry } from "./retry";
@@ -17,6 +17,16 @@ export function getAIClient(): AIProvider {
       );
     }
     return new AnthropicProvider(config.anthropicApiKey);
+  }
+
+  if (config.provider === "google") {
+    if (!config.googleApiKey) {
+      throw new AIError(
+        "GOOGLE_API_KEY is required when AI_PROVIDER is google",
+        "MISSING_API_KEY"
+      );
+    }
+    return new GoogleProvider(config.googleApiKey);
   }
 
   if (!config.openaiApiKey) {
