@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useSyncExternalStore } from "react";
 import { Header } from "./header";
 
-export function ClientHeader() {
-  const [mounted, setMounted] = useState(false);
+// Simple client-only detection via useSyncExternalStore (no setState in effect)
+const emptySubscribe = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+export function ClientHeader() {
+  const mounted = useSyncExternalStore(emptySubscribe, getClientSnapshot, getServerSnapshot);
 
   // Don't render during SSR to avoid hydration issues
   if (!mounted) {
