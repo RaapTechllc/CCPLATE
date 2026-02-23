@@ -39,7 +39,7 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.71.2",
+    "@anthropic-ai/sdk": "^0.74.0",
     "@auth/core": "^0.37.0",
     "@aws-sdk/client-s3": "^3.972.0",
     "@convex-dev/auth": "^0.0.90",
