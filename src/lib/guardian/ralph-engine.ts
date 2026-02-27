@@ -784,7 +784,7 @@ export class RalphEngine {
       return;
     }
     
-    let execution: TaskExecution = {
+    const execution: TaskExecution = {
       taskId: task.id,
       attempt: 0,
       status: "pending",

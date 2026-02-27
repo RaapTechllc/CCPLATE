@@ -33,7 +33,7 @@ interface TaskState {
 }
 
 export default function GuardianLivePage() {
-  const [connection, setConnection] = useState<ConnectionState>({ status: "disconnected" });
+  const [connection, setConnection] = useState<ConnectionState>({ status: "connecting" });
   const [events, setEvents] = useState<ProgressUpdate[]>([]);
   const [phases, setPhases] = useState<Map<string, PhaseProgress>>(new Map());
   const [tasks, setTasks] = useState<Map<string, TaskState>>(new Map());
@@ -50,77 +50,7 @@ export default function GuardianLivePage() {
   const MAX_EVENTS = 100;
   const MAX_BUILD_LOG_LINES = 200;
   const RECONNECT_DELAY = 3000;
-  
-  const connect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-    
-    setConnection(prev => ({ ...prev, status: "connecting" }));
-    
-    const url = new URL("/api/guardian/stream", window.location.origin);
-    url.searchParams.set("replay", "true");
-    
-    const es = new EventSource(url.toString());
-    eventSourceRef.current = es;
-    
-    es.onopen = () => {
-      setConnection({
-        status: "connected",
-        lastConnected: new Date(),
-        reconnectAttempt: 0,
-      });
-    };
-    
-    es.onerror = () => {
-      setConnection(prev => ({
-        status: "error",
-        lastConnected: prev.lastConnected,
-        reconnectAttempt: (prev.reconnectAttempt || 0) + 1,
-      }));
-      
-      es.close();
-      
-      // Auto-reconnect
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      reconnectTimeoutRef.current = setTimeout(() => {
-        connect();
-      }, RECONNECT_DELAY);
-    };
-    
-    es.addEventListener("connect", (e: MessageEvent) => {
-      handleEvent(JSON.parse(e.data));
-    });
-    
-    es.addEventListener("replay", (e: MessageEvent) => {
-      handleEvent(JSON.parse(e.data));
-    });
-    
-    es.addEventListener("update", (e: MessageEvent) => {
-      handleEvent(JSON.parse(e.data));
-    });
-    
-    es.addEventListener("timeout", (e: MessageEvent) => {
-      handleEvent(JSON.parse(e.data));
-      // Will auto-reconnect via onerror
-    });
-  }, []);
-  
-  const disconnect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-    
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-    
-    setConnection({ status: "disconnected" });
-  }, []);
+  const connectRef = useRef<() => void>(() => {});
   
   const handleEvent = useCallback((update: ProgressUpdate) => {
     // Add to events list
@@ -214,6 +144,78 @@ export default function GuardianLivePage() {
     });
   }, []);
   
+  const disconnect = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    
+    setConnection({ status: "disconnected" });
+  }, []);
+  
+  const connect = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+    
+    setConnection(prev => ({ ...prev, status: "connecting" }));
+    
+    const url = new URL("/api/guardian/stream", window.location.origin);
+    url.searchParams.set("replay", "true");
+    
+    const es = new EventSource(url.toString());
+    eventSourceRef.current = es;
+    
+    es.onopen = () => {
+      setConnection({
+        status: "connected",
+        lastConnected: new Date(),
+        reconnectAttempt: 0,
+      });
+    };
+    
+    es.onerror = () => {
+      setConnection(prev => ({
+        status: "error",
+        lastConnected: prev.lastConnected,
+        reconnectAttempt: (prev.reconnectAttempt || 0) + 1,
+      }));
+      
+      es.close();
+      
+      // Auto-reconnect
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      reconnectTimeoutRef.current = setTimeout(() => {
+        connectRef.current();
+      }, RECONNECT_DELAY);
+    };
+    
+    es.addEventListener("connect", (e: MessageEvent) => {
+      handleEvent(JSON.parse(e.data));
+    });
+    
+    es.addEventListener("replay", (e: MessageEvent) => {
+      handleEvent(JSON.parse(e.data));
+    });
+    
+    es.addEventListener("update", (e: MessageEvent) => {
+      handleEvent(JSON.parse(e.data));
+    });
+    
+    es.addEventListener("timeout", (e: MessageEvent) => {
+      handleEvent(JSON.parse(e.data));
+      // Will auto-reconnect via onerror
+    });
+  }, [handleEvent]);
+  useEffect(() => { connectRef.current = connect; }, [connect]);
+  
   // Auto-scroll build log
   useEffect(() => {
     if (buildLogRef.current) {
@@ -228,8 +230,9 @@ export default function GuardianLivePage() {
     }
   }, [events]);
   
-  // Connect on mount
+  // Connect on mount — setState in connect() is intentional for connection status tracking
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- EventSource setup requires connection state updates
     connect();
     return () => {
       disconnect();

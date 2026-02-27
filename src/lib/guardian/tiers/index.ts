@@ -138,22 +138,27 @@ export {
   type RalphMetrics,
 } from "./beginner";
 
+import { BEGINNER_CONFIG } from "./beginner";
+import { INTERMEDIATE_CONFIG } from "./intermediate";
+import { ADVANCED_CONFIG } from "./advanced";
+import { EXPERT_CONFIG } from "./expert";
+import { TEAM_CONFIG } from "./team";
+
+const TIER_CONFIGS: Record<WorkflowTier, TierConfig> = {
+  beginner: BEGINNER_CONFIG,
+  intermediate: INTERMEDIATE_CONFIG,
+  advanced: ADVANCED_CONFIG,
+  expert: EXPERT_CONFIG,
+  team: TEAM_CONFIG,
+};
+
 // Get config by tier
 export function getTierConfig(tier: WorkflowTier): TierConfig {
-  switch (tier) {
-    case "beginner":
-      return require("./beginner").BEGINNER_CONFIG;
-    case "intermediate":
-      return require("./intermediate").INTERMEDIATE_CONFIG;
-    case "advanced":
-      return require("./advanced").ADVANCED_CONFIG;
-    case "expert":
-      return require("./expert").EXPERT_CONFIG;
-    case "team":
-      return require("./team").TEAM_CONFIG;
-    default:
-      throw new Error(`Unknown tier: ${tier}`);
+  const config = TIER_CONFIGS[tier];
+  if (!config) {
+    throw new Error(`Unknown tier: ${tier}`);
   }
+  return config;
 }
 
 // Get tier display info
