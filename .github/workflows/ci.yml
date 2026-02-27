@@ -57,7 +57,7 @@ jobs:
         run: npm run test:unit:coverage
 
       - name: Upload coverage reports
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         if: github.event_name == 'push'
         with:
           files: ./coverage/**/coverage.json
